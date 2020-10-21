@@ -10,9 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
-	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -65,7 +63,11 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 	sigAlgo := x509.SHA1WithRSA
 
 	if client.Supports("SHA-256") || client.Supports("SCEPStandard") {
-		sigAlgo = x509.SHA256WithRSA
+		if keyAlg == "EC" {
+			sigAlgo = x509.ECDSAWithSHA256
+		} else {
+			sigAlgo = x509.SHA256WithRSA
+		}
 	}
 
 	var key crypto.PrivateKey
@@ -106,8 +108,6 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 	if err != nil {
 		return nil, errors.New("Error creating CSR")
 	}
-
-	crt, err := sign(key, csr)
 
 	resp, certNum, err := client.GetCACert(ctx)
 	if err != nil {
@@ -176,7 +176,7 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 		break // on scep.SUCCESS
 	}
 
-	if err := respMsg.DecryptPKIEnvelope(crt, signerKey); err != nil {
+	if err := respMsg.DecryptPKIEnvelope(signerCert, signerKey); err != nil {
 		return nil, ErrBadRequest
 	}
 	respCert := respMsg.CertRepMessage.Certificate
@@ -318,50 +318,6 @@ func subjOrNil(input string) []string {
 		return nil
 	}
 	return []string{input}
-}
-
-func sign(priv crypto.PrivateKey, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-	self, err := selfSign(priv, csr)
-	if err != nil {
-		return nil, err
-	}
-	return self, nil
-}
-
-func selfSign(priv crypto.PrivateKey, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate serial number: %s", err)
-	}
-
-	notBefore := time.Now()
-	notAfter := notBefore.Add(time.Hour * 1)
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			CommonName:   "SCEP SIGNER",
-			Organization: csr.Subject.Organization,
-		},
-		NotBefore: notBefore,
-		NotAfter:  notAfter,
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-	var derBytes []byte
-	switch priv.(type) {
-	case *rsa.PrivateKey:
-		derBytes, err = x509.CreateCertificate(rand.Reader, &template, &template, &priv.(*rsa.PrivateKey).PublicKey, priv)
-	case *ecdsa.PrivateKey:
-		derBytes, err = x509.CreateCertificate(rand.Reader, &template, &template, &priv.(*ecdsa.PrivateKey).PublicKey, priv)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return x509.ParseCertificate(derBytes)
 }
 
 const (
