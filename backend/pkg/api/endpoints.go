@@ -21,7 +21,7 @@ func MakeServerEndpoints(s Service) Endpoints {
 func MakePostSetConfigEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(postSetConfigRequest)
-		err = s.PostSetConfig(ctx, req.AuthCRT, req.ServerURL)
+		err = s.PostSetConfig(ctx, req.AuthCRT, req.CA)
 		return postSetConfigResponse{Err: err}, nil
 	}
 }
@@ -35,8 +35,8 @@ func MakePostGetCRTEndpoint(s Service) endpoint.Endpoint {
 }
 
 type postSetConfigRequest struct {
-	AuthCRT   string `json:"crt"`
-	ServerURL string `json:"serverURL"`
+	AuthCRT string `json:"crt"`
+	CA      string `json:"ca"`
 }
 
 type postSetConfigResponse struct {

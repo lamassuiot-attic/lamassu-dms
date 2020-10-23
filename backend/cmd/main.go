@@ -34,7 +34,7 @@ func main() {
 
 	var s api.Service
 	{
-		s = api.NewDeviceService(cfg.CAPath, cfg.CertFile, cfg.KeyFile)
+		s = api.NewDeviceService(cfg.CAPath, cfg.CertFile, cfg.KeyFile, cfg.SCEPMapping)
 		s = api.LoggingMidleware(logger)(s)
 	}
 

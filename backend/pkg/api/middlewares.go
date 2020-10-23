@@ -30,9 +30,9 @@ func (mw loggingMidleware) PostGetCRT(ctx context.Context, keyAlg string, keySiz
 	return mw.next.PostGetCRT(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email)
 }
 
-func (mw loggingMidleware) PostSetConfig(ctx context.Context, authCRT string, serverURL string) (err error) {
+func (mw loggingMidleware) PostSetConfig(ctx context.Context, authCRT string, CA string) (err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log("method", "PostGetCRT", "took", time.Since(begin), "err", err)
 	}(time.Now())
-	return mw.next.PostSetConfig(ctx, authCRT, serverURL)
+	return mw.next.PostSetConfig(ctx, authCRT, CA)
 }

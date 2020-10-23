@@ -33,27 +33,28 @@ type Service interface {
 }
 
 type deviceService struct {
-	mtx       sync.RWMutex
-	CAPath    string
-	CertFile  string
-	KeyFile   string
-	serverURL string
+	mtx         sync.RWMutex
+	CAPath      string
+	CertFile    string
+	KeyFile     string
+	serverURL   string
+	SCEPMapping map[string]string
 }
 
-func NewDeviceService(CAPath string, CertFile string, KeyFile string) Service {
-	return &deviceService{CAPath: CAPath, CertFile: CertFile, KeyFile: KeyFile}
+func NewDeviceService(CAPath string, CertFile string, KeyFile string, SCEPMapping map[string]string) Service {
+	return &deviceService{CAPath: CAPath, CertFile: CertFile, KeyFile: KeyFile, SCEPMapping: SCEPMapping}
 }
 
 var (
 	ErrBadRequest = errors.New("Bad Request")
 )
 
-func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, serverURL string) error {
+func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA string) error {
 	err := s.authFabricationSystem(authCRT)
 	if err != nil {
 		return err
 	}
-	s.serverURL = serverURL
+	s.serverURL = "http://" + s.SCEPMapping[CA] + ":8088/scep"
 	return nil
 }
 
@@ -111,7 +112,7 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 
 	resp, certNum, err := client.GetCACert(ctx)
 	if err != nil {
-		return nil, errors.New("Error getting CA certificate from SCEP")
+		return nil, err
 	}
 	var certs []*x509.Certificate
 	{
@@ -163,7 +164,7 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 
 		respMsg, err = scep.ParsePKIMessage(respBytes)
 		if err != nil {
-			return nil, errors.New("Error parsing server message")
+			return nil, err
 		}
 
 		switch respMsg.PKIStatus {
