@@ -89,7 +89,7 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 
 func codeFrom(err error) int {
 	switch err {
-	case ErrBadRequest:
+	case ErrCertVerification, ErrRemoteConnection:
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError

@@ -2,6 +2,7 @@ package main
 
 import (
 	"device-manufacturing-system/pkg/api"
+	"device-manufacturing-system/pkg/client/scep"
 	"device-manufacturing-system/pkg/configs"
 	"flag"
 	"fmt"
@@ -32,9 +33,11 @@ func main() {
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
 
+	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.SCEPMapping)
+
 	var s api.Service
 	{
-		s = api.NewDeviceService(cfg.CAPath, cfg.CertFile, cfg.KeyFile, cfg.SCEPMapping)
+		s = api.NewDeviceService(cfg.CAPath, client)
 		s = api.LoggingMidleware(logger)(s)
 	}
 
