@@ -46,7 +46,7 @@ func NewClient(certFile string, keyFile string, SCEPMapping map[string]string) c
 
 func (s *SCEP) StartRemoteClient(CA string) error {
 	ctx := context.Background()
-	serverURL := "http://" + s.SCEPMapping[CA] + ":9088/scep"
+	serverURL := "http://" + s.SCEPMapping[CA] + ":8088/scep"
 	s.remote = scepclient.NewClient(serverURL)
 	_, err := s.remote.GetCACaps(ctx)
 	if err != nil {
