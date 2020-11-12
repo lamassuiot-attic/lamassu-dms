@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"device-manufacturing-system/pkg/client"
 	"device-manufacturing-system/pkg/utils"
@@ -25,29 +26,36 @@ type Service interface {
 }
 
 type deviceService struct {
-	mtx       sync.RWMutex
-	CAPath    string
-	serverURL string
-	client    client.Client
+	mtx         sync.RWMutex
+	CAPath      string
+	serverURL   string
+	authKeyFile string
+	client      client.Client
 }
 
-func NewDeviceService(CAPath string, client client.Client) Service {
-	return &deviceService{CAPath: CAPath, client: client}
+func NewDeviceService(CAPath string, authKeyFile string, client client.Client) Service {
+	return &deviceService{CAPath: CAPath, authKeyFile: authKeyFile, client: client}
 }
 
 var (
 	ErrCertLoading      = errors.New("unable to read certificate")
 	ErrCACertLoading    = errors.New("unable to read CA certificate")
+	ErrKeyMatching      = errors.New("private and public key do not match")
 	ErrCertVerification = errors.New("unable to verify certificate")
+	ErrGetAuthKey       = errors.New("error obtaining authentication key")
 	ErrRemoteConnection = errors.New("unable to start remote connection")
 )
 
 func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA string) error {
-	err := s.authFabricationSystem([]byte(authCRT))
+	authKey, err := loadAuthKey(s.authKeyFile)
 	if err != nil {
-		return err
+		return ErrGetAuthKey
 	}
-	err = s.client.StartRemoteClient(CA)
+	cert, err := tls.X509KeyPair([]byte(authCRT), authKey)
+	if err != nil {
+		return ErrKeyMatching
+	}
+	err = s.client.StartRemoteClient(CA, []tls.Certificate{cert})
 	if err != nil {
 		return ErrRemoteConnection
 	}
@@ -90,6 +98,15 @@ func (s *deviceService) authFabricationSystem(authCRT []byte) error {
 	return nil
 }
 
+func parseFabricationSystemCert(data []byte) ([]byte, error) {
+	pemBlock, _ := pem.Decode(data)
+	err := utils.CheckPEMBlock(pemBlock, utils.CertPEMBlockType)
+	if err != nil {
+		return nil, ErrCertVerification
+	}
+	return pemBlock.Bytes, nil
+}
+
 func loadFabricationSystemCert(data []byte) (*x509.Certificate, error) {
 	pemBlock, _ := pem.Decode(data)
 	err := utils.CheckPEMBlock(pemBlock, utils.CertPEMBlockType)
@@ -126,4 +143,12 @@ func verifyFabricationSystemCert(cert *x509.Certificate, caCertPool *x509.CertPo
 		return ErrCertVerification
 	}
 	return nil
+}
+
+func loadAuthKey(keyPath string) ([]byte, error) {
+	keyPEM, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		return nil, err
+	}
+	return keyPEM, nil
 }
