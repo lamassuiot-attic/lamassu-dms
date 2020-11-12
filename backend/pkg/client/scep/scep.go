@@ -3,12 +3,16 @@ package scep
 import (
 	"context"
 	"crypto"
+	"crypto/tls"
 	"crypto/x509"
 	"device-manufacturing-system/pkg/client"
 	"errors"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	scepclient "github.com/micromdm/scep/client"
 	"github.com/micromdm/scep/scep"
 )
@@ -19,10 +23,11 @@ const (
 )
 
 type SCEP struct {
-	keyFile     string
-	certFile    string
-	SCEPMapping map[string]string
-	remote      scepclient.Client
+	keyFile      string
+	certFile     string
+	proxyAddress string
+	SCEPMapping  map[string]string
+	remote       scepclient.Client
 }
 
 type CSROptions struct {
@@ -40,15 +45,28 @@ var (
 	ErrRemoteConnection  = errors.New("error connecting to remote server")
 )
 
-func NewClient(certFile string, keyFile string, SCEPMapping map[string]string) client.Client {
-	return &SCEP{certFile: certFile, keyFile: keyFile, SCEPMapping: SCEPMapping}
+func NewClient(certFile string, keyFile string, proxyAddress string, SCEPMapping map[string]string) client.Client {
+	return &SCEP{certFile: certFile, keyFile: keyFile, proxyAddress: proxyAddress, SCEPMapping: SCEPMapping}
 }
 
-func (s *SCEP) StartRemoteClient(CA string) error {
+func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 	ctx := context.Background()
-	serverURL := "http://" + s.SCEPMapping[CA] + ":8088/scep"
-	s.remote = scepclient.NewClient(serverURL)
-	_, err := s.remote.GetCACaps(ctx)
+	serverURL := s.proxyAddress + "/" + s.SCEPMapping[CA] + "/"
+	httpc := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       authCRT,
+			},
+		},
+	}
+	logger := log.NewLogfmtLogger(os.Stderr)
+	client, err := scepclient.New(serverURL, logger, httpc)
+	if err != nil {
+		return ErrRemoteConnection
+	}
+	s.remote = client
+	_, err = s.remote.GetCACaps(ctx)
 	if err != nil {
 		return ErrRemoteConnection
 	}

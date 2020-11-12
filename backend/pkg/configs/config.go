@@ -11,9 +11,11 @@ type Config struct {
 
 	CAPath string
 
-	CertFile    string
-	KeyFile     string
-	SCEPMapping map[string]string
+	CertFile     string
+	KeyFile      string
+	AuthKeyFile  string
+	ProxyAddress string
+	SCEPMapping  map[string]string
 }
 
 func NewConfig() (Config, error) {

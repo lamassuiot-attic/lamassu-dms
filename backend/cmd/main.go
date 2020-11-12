@@ -1,14 +1,17 @@
 package main
 
 import (
+	"crypto/x509"
 	"device-manufacturing-system/pkg/api"
 	"device-manufacturing-system/pkg/client/scep"
 	"device-manufacturing-system/pkg/configs"
+	"device-manufacturing-system/pkg/ocsp"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/go-kit/kit/log"
@@ -33,11 +36,11 @@ func main() {
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
 
-	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.SCEPMapping)
+	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.ProxyAddress, cfg.SCEPMapping)
 
 	var s api.Service
 	{
-		s = api.NewDeviceService(cfg.CAPath, client)
+		s = api.NewDeviceService(cfg.CAPath, cfg.AuthKeyFile, client)
 		s = api.LoggingMidleware(logger)(s)
 	}
 
@@ -74,4 +77,31 @@ func accessControl(h http.Handler, UIProtocol string, UIHost string, UIPort stri
 
 		h.ServeHTTP(w, r)
 	})
+}
+
+func verifyPeerCertificateParallel(_ [][]byte, verifiedChains [][]*x509.Certificate) (err error) {
+	for i := 0; i < len(verifiedChains); i++ {
+		var wg sync.WaitGroup
+		n := len(verifiedChains[i]) - 1
+		wg.Add(n)
+		ocspStatusChan := make(chan ocsp.OCSPStatus, n)
+		ocspErrorChan := make(chan error, n)
+		for j := 0; j < n; j++ {
+			go ocsp.GetRevocationStatus(&wg, ocspStatusChan, ocspErrorChan, verifiedChains[i][j], verifiedChains[i][j+1])
+		}
+		results := make([]ocsp.OCSPStatus, n)
+		for j := 0; j < n; j++ {
+			results[j] = <-ocspStatusChan
+		}
+		close(ocspErrorChan)
+		close(ocspStatusChan)
+		wg.Wait()
+		for _, r := range results {
+			if r != ocsp.OCSPSuccess {
+				e := <-ocspErrorChan
+				return fmt.Errorf("failed certificate revocation check. err: %v", e)
+			}
+		}
+	}
+	return nil
 }
