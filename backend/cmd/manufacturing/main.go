@@ -2,10 +2,10 @@ package main
 
 import (
 	"crypto/x509"
-	"device-manufacturing-system/pkg/api"
-	"device-manufacturing-system/pkg/client/scep"
-	"device-manufacturing-system/pkg/configs"
-	"device-manufacturing-system/pkg/ocsp"
+	"device-manufacturing-system/pkg/manufacturing/api"
+	"device-manufacturing-system/pkg/manufacturing/client/scep"
+	"device-manufacturing-system/pkg/manufacturing/configs"
+	"device-manufacturing-system/pkg/manufacturing/ocsp"
 	"flag"
 	"fmt"
 	"net/http"

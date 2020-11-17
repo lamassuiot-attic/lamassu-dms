@@ -3,7 +3,7 @@ package scep
 import (
 	"crypto/rsa"
 	"crypto/x509"
-	"device-manufacturing-system/pkg/utils"
+	"device-manufacturing-system/pkg/manufacturing/utils"
 	"encoding/pem"
 	"io/ioutil"
 )

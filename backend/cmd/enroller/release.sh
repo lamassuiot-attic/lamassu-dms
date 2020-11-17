@@ -1,7 +1,7 @@
 #!/bin/bash
 
-NAME=manufacturing-system
-OUTPUT=../build
+NAME=manufacturing-enroller
+OUTPUT=../../build
 
 mkdir -p ${OUTPUT}
 

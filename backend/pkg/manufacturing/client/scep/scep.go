@@ -5,7 +5,7 @@ import (
 	"crypto"
 	"crypto/tls"
 	"crypto/x509"
-	"device-manufacturing-system/pkg/client"
+	"device-manufacturing-system/pkg/manufacturing/client"
 	"errors"
 	"net/http"
 	"os"
