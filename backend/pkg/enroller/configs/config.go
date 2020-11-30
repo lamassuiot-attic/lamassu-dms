@@ -19,15 +19,17 @@ type Config struct {
 	KeycloakPort     string
 	KeycloakProtocol string
 	KeycloakRealm    string
+	KeycloakCA       string
 
 	CertFile     string
 	KeyFile      string
 	ProxyAddress string
+	ProxyCA      string
 }
 
-func NewConfig() (Config, error) {
+func NewConfig(prefix string) (Config, error) {
 	var cfg Config
-	err := envconfig.Process("enroller", &cfg)
+	err := envconfig.Process(prefix, &cfg)
 	if err != nil {
 		return Config{}, err
 	}

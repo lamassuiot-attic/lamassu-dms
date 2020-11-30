@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	csrmodel "device-manufacturing-system/pkg/enroller/models/csr"
+	"device-manufacturing-system/pkg/enroller/utils"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,9 +16,9 @@ import (
 	httptransport "github.com/go-kit/kit/transport/http"
 )
 
-func ProxyingMiddleware(proxyURL string, logger log.Logger) ServiceMiddleware {
+func ProxyingMiddleware(proxyURL string, proxyCA string, logger log.Logger) ServiceMiddleware {
 	return func(next Service) Service {
-		return proxymw{next, makeGetCRTProxy(proxyURL)}
+		return proxymw{next, makeGetCRTProxy(proxyURL, proxyCA)}
 	}
 }
 
@@ -46,7 +47,7 @@ func (mw proxymw) GetCRT(ctx context.Context, id int) ([]byte, error) {
 	return resp.Data, nil
 }
 
-func makeGetCRTProxy(proxyURL string) endpoint.Endpoint {
+func makeGetCRTProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
 	if !strings.HasPrefix(proxyURL, "http") {
 		proxyURL = "http://" + proxyURL
 	}
@@ -57,10 +58,16 @@ func makeGetCRTProxy(proxyURL string) endpoint.Endpoint {
 	if u.Path == "" {
 		u.Path = "/v1/csrs"
 	}
+
+	caCertPool, err := utils.CreateCAPool(proxyCA)
+	if err != nil {
+		return nil
+	}
+
 	httpc := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				RootCAs: caCertPool,
 			},
 		},
 	}
