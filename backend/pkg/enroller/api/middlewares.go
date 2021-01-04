@@ -24,6 +24,17 @@ type loggingMiddleware struct {
 	logger log.Logger
 }
 
+func (mw loggingMiddleware) Health(ctx context.Context) (healthy bool) {
+	defer func(begin time.Time) {
+		mw.logger.Log(
+			"method", "Health",
+			"took", time.Since(begin),
+			"healthy", healthy,
+		)
+	}(time.Now())
+	return mw.next.Health(ctx)
+}
+
 func (mw loggingMiddleware) GetCSRs(ctx context.Context) (csrs csrmodel.CSRs) {
 	defer func(begin time.Time) {
 		mw.logger.Log(

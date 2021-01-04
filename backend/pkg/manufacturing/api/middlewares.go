@@ -23,6 +23,17 @@ type loggingMidleware struct {
 	logger log.Logger
 }
 
+func (mw loggingMidleware) Health(ctx context.Context) (healthy bool) {
+	defer func(begin time.Time) {
+		mw.logger.Log(
+			"method", "Health",
+			"took", time.Since(begin),
+			"healthy", healthy,
+		)
+	}(time.Now())
+	return mw.next.Health(ctx)
+}
+
 func (mw loggingMidleware) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(

@@ -12,6 +12,7 @@ import (
 )
 
 type Service interface {
+	Health(ctx context.Context) bool
 	GetCSRs(ctx context.Context) csrmodel.CSRs
 	GetCSRStatus(ctx context.Context, id int) (csrmodel.CSR, error)
 	GetCRT(ctx context.Context, id int) ([]byte, error)
@@ -24,6 +25,10 @@ type enrollerService struct {
 
 func NewEnrrolerService(csrDBStore store.DB) Service {
 	return &enrollerService{csrDBStore: csrDBStore}
+}
+
+func (s *enrollerService) Health(ctx context.Context) bool {
+	return true
 }
 
 func (s *enrollerService) GetCSRs(ctx context.Context) csrmodel.CSRs {

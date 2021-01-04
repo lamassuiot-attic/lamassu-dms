@@ -21,6 +21,7 @@ const (
 )
 
 type Service interface {
+	Health(ctx context.Context) bool
 	PostSetConfig(ctx context.Context, authCRT string, CA string) error
 	PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error)
 }
@@ -49,6 +50,10 @@ var (
 	//Server errors
 	errRemoteConnection = errors.New("unable to start remote connection")
 )
+
+func (s *deviceService) Health(ctx context.Context) bool {
+	return true
+}
 
 func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA string) error {
 	authKey, err := loadAuthKey(s.authKeyFile)

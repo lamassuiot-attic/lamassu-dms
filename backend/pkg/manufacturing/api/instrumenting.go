@@ -23,6 +23,15 @@ func NewInstumentingMiddleware(counter metrics.Counter, latency metrics.Histogra
 	}
 }
 
+func (mw *instrumentingMiddleware) Health(ctx context.Context) bool {
+	defer func(begin time.Time) {
+		mw.requestCount.With("method", "Health").Add(1)
+		mw.requestLatency.With("method", "Health").Observe(time.Since(begin).Seconds())
+	}(time.Now())
+
+	return mw.next.Health(ctx)
+}
+
 func (mw *instrumentingMiddleware) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error) {
 	defer func(begin time.Time) {
 		mw.requestCount.With("method", "PostGetCRT").Add(1)

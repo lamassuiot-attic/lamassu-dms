@@ -24,6 +24,15 @@ func NewInstrumentingMiddleware(counter metrics.Counter, latency metrics.Histogr
 	}
 }
 
+func (mw *instrumentingMiddleware) Health(ctx context.Context) bool {
+	defer func(begin time.Time) {
+		mw.requestCount.With("method", "Health").Add(1)
+		mw.requestLatency.With("method", "Health").Observe(time.Since(begin).Seconds())
+	}(time.Now())
+
+	return mw.next.Health(ctx)
+}
+
 func (mw *instrumentingMiddleware) GetCSRs(ctx context.Context) (csrs csrmodel.CSRs) {
 	defer func(begin time.Time) {
 		mw.requestCount.With("method", "GetCSRs").Add(1)

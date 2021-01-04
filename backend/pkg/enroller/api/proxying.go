@@ -27,6 +27,10 @@ type proxymw struct {
 	getCRT endpoint.Endpoint
 }
 
+func (mw proxymw) Health(ctx context.Context) bool {
+	return mw.next.Health(ctx)
+}
+
 func (mw proxymw) GetCSRs(ctx context.Context) csrmodel.CSRs {
 	return mw.next.GetCSRs(ctx)
 }
