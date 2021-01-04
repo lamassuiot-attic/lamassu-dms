@@ -2,33 +2,40 @@ package api
 
 import (
 	"context"
+	"device-manufacturing-system/pkg/manufacturing/auth"
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-kit/kit/auth/jwt"
 	"github.com/go-kit/kit/log"
 
+	stdjwt "github.com/dgrijalva/jwt-go"
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 )
 
-func MakeHTTPHandler(s Service, logger log.Logger) http.Handler {
+var claims = &auth.KeycloakClaims{}
+
+func MakeHTTPHandler(s Service, logger log.Logger, auth auth.Auth) http.Handler {
 	r := mux.NewRouter()
 	e := MakeServerEndpoints(s)
 
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
+		httptransport.ServerErrorEncoder(encodeError),
+		httptransport.ServerBefore(jwt.HTTPToContext()),
 	}
 
 	r.Methods("POST").Path("/v1/device/config").Handler(httptransport.NewServer(
-		e.PostSetConfigEndpoint,
+		jwt.NewParser(auth.Kf, stdjwt.SigningMethodRS256, auth.KeycloakClaimsFactory)(e.PostSetConfigEndpoint),
 		decodePostSetConfigRequest,
 		encodeResponse,
 		options...,
 	))
 
 	r.Methods("POST").Path("/v1/device").Handler(httptransport.NewServer(
-		e.PostGetCRTEndpoint,
+		jwt.NewParser(auth.Kf, stdjwt.SigningMethodRS256, auth.KeycloakClaimsFactory)(e.PostGetCRTEndpoint),
 		decodePostGetCRTRequest,
 		encodePostGetCRTResponse,
 		options...,
@@ -89,7 +96,7 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 
 func codeFrom(err error) int {
 	switch err {
-	case ErrCertVerification, ErrRemoteConnection:
+	case errGetAuthKey, errInvalidCert, errKeyMatching, errUnsupportedKey, errUnsupportedRSASize, errCNEmpty:
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError

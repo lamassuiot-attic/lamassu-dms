@@ -1,13 +1,18 @@
 package utils
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"io/ioutil"
 )
 
 const (
 	CertPEMBlockType = "CERTIFICATE"
 	KeyPEMBlockType  = "RSA PRIVATE KEY"
+	PublicKeyHeader  = "-----BEGIN PUBLIC KEY-----"
+	PublicKeyFooter  = "-----END PUBLIC KEY-----"
 )
 
 func PEMKey(derBytes []byte) []byte {
@@ -38,4 +43,24 @@ func CheckPEMBlock(pemBlock *pem.Block, blockType string) error {
 		return errors.New("unmatched type of headers")
 	}
 	return nil
+}
+
+func CreateCAPool(CAPath string) (*x509.CertPool, error) {
+	caCert, err := ioutil.ReadFile(CAPath)
+	if err != nil {
+		return nil, err
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+	return caCertPool, nil
+}
+
+func ParsePublicKey(data []byte) (*rsa.PublicKey, error) {
+	pubPem, _ := pem.Decode(data)
+	parsedKey, err := x509.ParsePKIXPublicKey(pubPem.Bytes)
+	if err != nil {
+		return nil, errors.New("Unable to parse public key")
+	}
+	pubKey := parsedKey.(*rsa.PublicKey)
+	return pubKey, nil
 }

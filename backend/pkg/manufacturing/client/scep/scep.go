@@ -6,9 +6,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"device-manufacturing-system/pkg/manufacturing/client"
+	"device-manufacturing-system/pkg/manufacturing/utils"
 	"errors"
+	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -27,7 +28,9 @@ type SCEP struct {
 	certFile     string
 	proxyAddress string
 	SCEPMapping  map[string]string
+	proxyCA      string
 	remote       scepclient.Client
+	logger       log.Logger
 }
 
 type CSROptions struct {
@@ -45,25 +48,36 @@ var (
 	ErrRemoteConnection  = errors.New("error connecting to remote server")
 )
 
-func NewClient(certFile string, keyFile string, proxyAddress string, SCEPMapping map[string]string) client.Client {
-	return &SCEP{certFile: certFile, keyFile: keyFile, proxyAddress: proxyAddress, SCEPMapping: SCEPMapping}
+func NewClient(certFile string, keyFile string, proxyAddress string, SCEPMapping map[string]string, proxyCA string, logger log.Logger) client.Client {
+	return &SCEP{
+		certFile:     certFile,
+		keyFile:      keyFile,
+		proxyAddress: proxyAddress,
+		SCEPMapping:  SCEPMapping,
+		proxyCA:      proxyCA,
+		logger:       logger,
+	}
 }
 
 func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 	ctx := context.Background()
 	serverURL := s.proxyAddress + "/" + s.SCEPMapping[CA] + "/"
+	caCertPool, err := utils.CreateCAPool(s.proxyCA)
+	if err != nil {
+		return err
+	}
+
 	httpc := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				Certificates:       authCRT,
+				RootCAs:      caCertPool,
+				Certificates: authCRT,
 			},
 		},
 	}
-	logger := log.NewLogfmtLogger(os.Stderr)
-	client, err := scepclient.New(serverURL, logger, httpc)
+	client, err := scepclient.New(serverURL, s.logger, httpc)
 	if err != nil {
-		return ErrRemoteConnection
+		return err
 	}
 	s.remote = client
 	_, err = s.remote.GetCACaps(ctx)
@@ -81,6 +95,8 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 	key, err := makeKey(keyAlg, keySize)
 
 	sigCert, sigKey, err := loadSignerInfo(s.certFile, s.keyFile)
+	fmt.Println(sigCert.NotBefore)
+	fmt.Println(sigCert.NotAfter)
 
 	if err != nil {
 		return nil, nil, ErrSignerInfoLoading
@@ -96,6 +112,7 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 		key:      key,
 		sigAlgo:  sigAlgo,
 	}
+
 	csr, err := makeCSR(opts)
 	if err != nil {
 		return nil, nil, ErrCSRCreate
@@ -105,6 +122,7 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 	if err != nil {
 		return nil, nil, ErrGetRemoteCA
 	}
+
 	var certs []*x509.Certificate
 	{
 		if certNum > 1 {

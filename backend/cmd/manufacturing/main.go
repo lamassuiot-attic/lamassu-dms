@@ -1,25 +1,26 @@
 package main
 
 import (
-	"crypto/x509"
+	"device-manufacturing-system/pkg/enroller/auth"
 	"device-manufacturing-system/pkg/manufacturing/api"
 	"device-manufacturing-system/pkg/manufacturing/client/scep"
 	"device-manufacturing-system/pkg/manufacturing/configs"
-	"device-manufacturing-system/pkg/manufacturing/ocsp"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/go-kit/kit/log"
+	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
+	stdprometheus "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
 
-	cfg, err := configs.NewConfig()
+	cfg, err := configs.NewConfig("manufacturing")
 	if err != nil {
 		panic(err)
 	}
@@ -36,18 +37,36 @@ func main() {
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
 
-	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.ProxyAddress, cfg.SCEPMapping)
+	auth := auth.NewAuth(cfg.KeycloakHostname, cfg.KeycloakPort, cfg.KeycloakProtocol, cfg.KeycloakRealm, cfg.KeycloakCA)
 
+	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.ProxyAddress, cfg.SCEPMapping, cfg.ProxyCA, logger)
+
+	fieldKeys := []string{"method"}
 	var s api.Service
 	{
-		s = api.NewDeviceService(cfg.CAPath, cfg.AuthKeyFile, client)
+		s = api.NewDeviceService(cfg.AuthKeyFile, client)
 		s = api.LoggingMidleware(logger)(s)
+		s = api.NewInstumentingMiddleware(
+			kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
+				Namespace: "device_manufacturing_system",
+				Subsystem: "manufacturing_service",
+				Name:      "request_count",
+				Help:      "Number of requests received.",
+			}, fieldKeys),
+			kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
+				Namespace: "device_manufacturing_system",
+				Subsystem: "manufacturing_service",
+				Name:      "request_latency_microseconds",
+				Help:      "Total duration of requests in microseconds.",
+			}, fieldKeys),
+		)(s)
 	}
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/v1/", api.MakeHTTPHandler(s, log.With(logger, "component", "HTTP")))
+	mux.Handle("/v1/", api.MakeHTTPHandler(s, log.With(logger, "component", "HTTP"), auth))
 	http.Handle("/", accessControl(mux, cfg.UIProtocol, cfg.UIHost, cfg.UIPort))
+	http.Handle("/metrics", promhttp.Handler())
 
 	errs := make(chan error)
 	go func() {
@@ -77,31 +96,4 @@ func accessControl(h http.Handler, UIProtocol string, UIHost string, UIPort stri
 
 		h.ServeHTTP(w, r)
 	})
-}
-
-func verifyPeerCertificateParallel(_ [][]byte, verifiedChains [][]*x509.Certificate) (err error) {
-	for i := 0; i < len(verifiedChains); i++ {
-		var wg sync.WaitGroup
-		n := len(verifiedChains[i]) - 1
-		wg.Add(n)
-		ocspStatusChan := make(chan ocsp.OCSPStatus, n)
-		ocspErrorChan := make(chan error, n)
-		for j := 0; j < n; j++ {
-			go ocsp.GetRevocationStatus(&wg, ocspStatusChan, ocspErrorChan, verifiedChains[i][j], verifiedChains[i][j+1])
-		}
-		results := make([]ocsp.OCSPStatus, n)
-		for j := 0; j < n; j++ {
-			results[j] = <-ocspStatusChan
-		}
-		close(ocspErrorChan)
-		close(ocspStatusChan)
-		wg.Wait()
-		for _, r := range results {
-			if r != ocsp.OCSPSuccess {
-				e := <-ocspErrorChan
-				return fmt.Errorf("failed certificate revocation check. err: %v", e)
-			}
-		}
-	}
-	return nil
 }

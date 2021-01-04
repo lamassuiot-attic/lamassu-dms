@@ -11,16 +11,23 @@ type Config struct {
 
 	CAPath string
 
+	KeycloakHostname string
+	KeycloakPort     string
+	KeycloakProtocol string
+	KeycloakRealm    string
+	KeycloakCA       string
+
 	CertFile     string
 	KeyFile      string
 	AuthKeyFile  string
 	ProxyAddress string
+	ProxyCA      string
 	SCEPMapping  map[string]string
 }
 
-func NewConfig() (Config, error) {
+func NewConfig(prefix string) (Config, error) {
 	var cfg Config
-	err := envconfig.Process("manufacturing", &cfg)
+	err := envconfig.Process(prefix, &cfg)
 	if err != nil {
 		return Config{}, err
 	}

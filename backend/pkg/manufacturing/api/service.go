@@ -21,49 +21,75 @@ const (
 )
 
 type Service interface {
-	PostSetConfig(ctx context.Context, authCRT string, serverURL string) error
+	PostSetConfig(ctx context.Context, authCRT string, CA string) error
 	PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error)
 }
 
 type deviceService struct {
 	mtx         sync.RWMutex
-	CAPath      string
 	serverURL   string
 	authKeyFile string
 	client      client.Client
 }
 
-func NewDeviceService(CAPath string, authKeyFile string, client client.Client) Service {
-	return &deviceService{CAPath: CAPath, authKeyFile: authKeyFile, client: client}
+func NewDeviceService(authKeyFile string, client client.Client) Service {
+	return &deviceService{authKeyFile: authKeyFile, client: client}
 }
 
 var (
-	ErrCertLoading      = errors.New("unable to read certificate")
-	ErrCACertLoading    = errors.New("unable to read CA certificate")
-	ErrKeyMatching      = errors.New("private and public key do not match")
-	ErrCertVerification = errors.New("unable to verify certificate")
-	ErrGetAuthKey       = errors.New("error obtaining authentication key")
-	ErrRemoteConnection = errors.New("unable to start remote connection")
+	//Client errors
+	errGetAuthKey         = errors.New("error obtaining authentication key")
+	errInvalidCert        = errors.New("invalid certificate")
+	errKeyMatching        = errors.New("private and public key do not match")
+	errUnsupportedKey     = errors.New("unsupported key algorithm")
+	errUnsupportedECSize  = errors.New("unsupported EC key size")
+	errUnsupportedRSASize = errors.New("unsupported RSA key size")
+	errCNEmpty            = errors.New("invalid content, CN is required")
+
+	//Server errors
+	errRemoteConnection = errors.New("unable to start remote connection")
 )
 
 func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA string) error {
 	authKey, err := loadAuthKey(s.authKeyFile)
 	if err != nil {
-		return ErrGetAuthKey
+		return errGetAuthKey
+	}
+	pemBlock, _ := pem.Decode([]byte(authCRT))
+	err = utils.CheckPEMBlock(pemBlock, utils.CertPEMBlockType)
+	if err != nil {
+		return errInvalidCert
 	}
 	cert, err := tls.X509KeyPair([]byte(authCRT), authKey)
 	if err != nil {
-		return ErrKeyMatching
+		return errKeyMatching
 	}
 	err = s.client.StartRemoteClient(CA, []tls.Certificate{cert})
 	if err != nil {
-		return ErrRemoteConnection
+		return errRemoteConnection
 	}
 	return nil
 }
 
 func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error) {
+	err = checkKeyAlg(keyAlg)
+	if err != nil {
+		return nil, err
+	}
+
+	err = checkKeySize(keyAlg, keySize)
+	if err != nil {
+		return nil, err
+	}
+
+	if cn == "" {
+		return nil, errCNEmpty
+	}
+
 	cert, key, err := s.client.GetCertificate(keyAlg, keySize, c, st, l, o, ou, cn, email)
+	if err != nil {
+		return nil, err
+	}
 
 	var repKey []byte
 	switch key.(type) {
@@ -79,68 +105,20 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 	return append(utils.PEMCert(cert.Raw), utils.PEMKey(repKey)...), nil
 }
 
-func (s *deviceService) authFabricationSystem(authCRT []byte) error {
-	cert, err := loadFabricationSystemCert(authCRT)
-	if err != nil {
-		return err
+func checkKeyAlg(keyAlg string) error {
+	if keyAlg != "EC" && keyAlg != "RSA" {
+		return errUnsupportedKey
 	}
-
-	caCertPool, err := createCACertPool(s.CAPath)
-	if err != nil {
-		return err
-	}
-
-	err = verifyFabricationSystemCert(cert, caCertPool)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func parseFabricationSystemCert(data []byte) ([]byte, error) {
-	pemBlock, _ := pem.Decode(data)
-	err := utils.CheckPEMBlock(pemBlock, utils.CertPEMBlockType)
-	if err != nil {
-		return nil, ErrCertVerification
-	}
-	return pemBlock.Bytes, nil
-}
-
-func loadFabricationSystemCert(data []byte) (*x509.Certificate, error) {
-	pemBlock, _ := pem.Decode(data)
-	err := utils.CheckPEMBlock(pemBlock, utils.CertPEMBlockType)
-	if err != nil {
-		return nil, ErrCertVerification
-	}
-	cert, err := x509.ParseCertificate(pemBlock.Bytes)
-	if err != nil {
-		return nil, ErrCertVerification
-	}
-	return cert, nil
-}
-
-func createCACertPool(CAPath string) (*x509.CertPool, error) {
-	caCert, err := ioutil.ReadFile(CAPath)
-	if err != nil {
-		return nil, ErrCACertLoading
-	}
-	caCertPool := x509.NewCertPool()
-	ok := caCertPool.AppendCertsFromPEM([]byte(caCert))
-	if !ok {
-		return nil, ErrCACertLoading
-	}
-	return caCertPool, nil
-}
-
-func verifyFabricationSystemCert(cert *x509.Certificate, caCertPool *x509.CertPool) error {
-	verifyOpts := x509.VerifyOptions{
-		Roots:     caCertPool,
-		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+func checkKeySize(keyAlg string, keySize int) error {
+	if keyAlg == "EC" && keySize != 384 && keySize != 256 {
+		return errUnsupportedECSize
 	}
 
-	if _, err := cert.Verify(verifyOpts); err != nil {
-		return ErrCertVerification
+	if keyAlg == "RSA" && keySize != 2048 && keySize != 4096 {
+		return errUnsupportedRSASize
 	}
 	return nil
 }

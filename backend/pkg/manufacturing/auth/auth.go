@@ -2,7 +2,7 @@ package auth
 
 import (
 	"crypto/tls"
-	"device-manufacturing-system/pkg/enroller/utils"
+	"device-manufacturing-system/pkg/manufacturing/utils"
 	"encoding/json"
 	"errors"
 	"net/http"
