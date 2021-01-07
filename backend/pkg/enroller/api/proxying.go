@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/tls"
+	"device-manufacturing-system/pkg/enroller/models/csr"
 	csrmodel "device-manufacturing-system/pkg/enroller/models/csr"
 	"device-manufacturing-system/pkg/enroller/utils"
 	"net/http"
@@ -18,13 +19,15 @@ import (
 
 func ProxyingMiddleware(proxyURL string, proxyCA string, logger log.Logger) ServiceMiddleware {
 	return func(next Service) Service {
-		return proxymw{next, makeGetCRTProxy(proxyURL, proxyCA)}
+		return proxymw{next, makeGetCSRsProxy(proxyURL, proxyCA), makeGetCSRStatusProxy(proxyURL, proxyCA), makeGetCRTProxy(proxyURL, proxyCA)}
 	}
 }
 
 type proxymw struct {
-	next   Service
-	getCRT endpoint.Endpoint
+	next         Service
+	getCSRs      endpoint.Endpoint
+	getCSRStatus endpoint.Endpoint
+	getCRT       endpoint.Endpoint
 }
 
 func (mw proxymw) Health(ctx context.Context) bool {
@@ -32,11 +35,27 @@ func (mw proxymw) Health(ctx context.Context) bool {
 }
 
 func (mw proxymw) GetCSRs(ctx context.Context) csrmodel.CSRs {
-	return mw.next.GetCSRs(ctx)
+	response, err := mw.getCSRs(ctx, getCSRsRequest{})
+	if err != nil {
+		return csrmodel.CSRs{}
+	}
+	resp := response.(getCSRsEmbeddedResponse)
+	if resp.CSRs.EmbeddedCSRs != nil {
+		return csrmodel.CSRs{CSRs: []csrmodel.CSR{resp.CSRs.EmbeddedCSRs.CSRs}}
+	} else if resp.CSRs.CSRs != nil {
+		return csrmodel.CSRs{CSRs: resp.CSRs.CSRs.CSRs}
+	} else {
+		return csrmodel.CSRs{}
+	}
 }
 
 func (mw proxymw) GetCSRStatus(ctx context.Context, id int) (csrmodel.CSR, error) {
-	return mw.next.GetCSRStatus(ctx, id)
+	response, err := mw.getCSRStatus(ctx, getCSRStatusRequest{ID: id})
+	if err != nil {
+		return csrmodel.CSR{}, err
+	}
+	resp := response.(csr.CSR)
+	return resp, nil
 }
 
 func (mw proxymw) GetCRT(ctx context.Context, id int) ([]byte, error) {
@@ -51,21 +70,14 @@ func (mw proxymw) GetCRT(ctx context.Context, id int) ([]byte, error) {
 	return resp.Data, nil
 }
 
-func makeGetCRTProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
-	if !strings.HasPrefix(proxyURL, "http") {
-		proxyURL = "http://" + proxyURL
-	}
-	u, err := url.Parse(proxyURL)
-	if err != nil {
-		panic(err)
-	}
+func makeProxyClient(u *url.URL, proxyCA string) *http.Client {
 	if u.Path == "" {
 		u.Path = "/v1/csrs"
 	}
 
 	caCertPool, err := utils.CreateCAPool(proxyCA)
 	if err != nil {
-		return nil
+		panic(err)
 	}
 
 	httpc := &http.Client{
@@ -75,6 +87,65 @@ func makeGetCRTProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
 			},
 		},
 	}
+
+	return httpc
+}
+
+func makeGetCSRStatusProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
+	if !strings.HasPrefix(proxyURL, "http") {
+		proxyURL = "http://" + proxyURL
+	}
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		panic(err)
+	}
+	httpc := makeProxyClient(u, proxyCA)
+	options := []httptransport.ClientOption{
+		httptransport.SetClient(httpc),
+		httptransport.ClientBefore(jwt.ContextToHTTP()),
+	}
+
+	return httptransport.NewClient(
+		"GET",
+		u,
+		encodeGetCSRStatusRequest,
+		decodeGetCSRStatusResponse,
+		options...,
+	).Endpoint()
+}
+
+func makeGetCSRsProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
+	if !strings.HasPrefix(proxyURL, "http") {
+		proxyURL = "http://" + proxyURL
+	}
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		panic(err)
+	}
+	httpc := makeProxyClient(u, proxyCA)
+	options := []httptransport.ClientOption{
+		httptransport.SetClient(httpc),
+		httptransport.ClientBefore(jwt.ContextToHTTP()),
+	}
+
+	return httptransport.NewClient(
+		"GET",
+		u,
+		encodeGetCSRsRequest,
+		decodeGetCSRsResponse,
+		options...,
+	).Endpoint()
+}
+
+func makeGetCRTProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
+	if !strings.HasPrefix(proxyURL, "http") {
+		proxyURL = "http://" + proxyURL
+	}
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		panic(err)
+	}
+	httpc := makeProxyClient(u, proxyCA)
 	options := []httptransport.ClientOption{
 		httptransport.SetClient(httpc),
 		httptransport.ClientBefore(jwt.ContextToHTTP()),

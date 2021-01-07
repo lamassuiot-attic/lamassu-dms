@@ -37,7 +37,7 @@ func createJWTTtoken(t *testing.T) *stdjwt.Token {
 		AuthContextClassReference: "0",
 		AllowedOrigins:            []string{"*"},
 		RealmAccess:               Roles{RoleNames: []string{"offline_access", "admin", "uma_authorization"}},
-		ResourceAccess:            Account{Roles: []Roles{Roles{RoleNames: []string{"manage-account", "manage-account-links", "view-profile"}}}},
+		ResourceAccess:            Account{roles: []Roles{Roles{RoleNames: []string{"manage-account", "manage-account-links", "view-profile"}}}},
 		Scope:                     "openid email profile",
 		EmailVerified:             false,
 		PreferredUsername:         "enroller",

@@ -28,7 +28,7 @@ type Roles struct {
 }
 
 type Account struct {
-	Roles []Roles `json:"account"`
+	roles []Roles `json:"account"`
 }
 
 type KeycloakClaims struct {

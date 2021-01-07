@@ -8,10 +8,11 @@ require (
 	github.com/go-kit/kit v0.10.0
 	github.com/gorilla/mux v1.8.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/lib/pq v1.4.0
+	github.com/lib/pq v1.9.0
 	github.com/micromdm/scep v1.0.0
 	github.com/nvellon/hal v0.3.0
 	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.8.0
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 )
 

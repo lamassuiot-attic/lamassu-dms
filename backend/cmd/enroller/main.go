@@ -4,7 +4,6 @@ import (
 	"device-manufacturing-system/pkg/enroller/api"
 	"device-manufacturing-system/pkg/enroller/auth"
 	"device-manufacturing-system/pkg/enroller/configs"
-	"device-manufacturing-system/pkg/enroller/models/csr/store/db"
 	"fmt"
 	"net/http"
 	"os"
@@ -31,18 +30,12 @@ func main() {
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
 
-	connStr := "dbname=" + cfg.PostgresDB + " user=" + cfg.PostgresUser + " password=" + cfg.PostgresPassword + " host=" + cfg.PostgresHostname + " port=" + cfg.PostgresPort + " sslmode=disable"
-	db, err := db.NewDB("postgres", connStr)
-	if err != nil {
-		panic(err)
-	}
-
 	auth := auth.NewAuth(cfg.KeycloakHostname, cfg.KeycloakPort, cfg.KeycloakProtocol, cfg.KeycloakRealm, cfg.KeycloakCA)
 
 	fieldKeys := []string{"method"}
 	var s api.Service
 	{
-		s = api.NewEnrrolerService(db)
+		s = api.NewEnrrolerService()
 		s = api.ProxyingMiddleware(cfg.ProxyAddress, cfg.ProxyCA, logger)(s)
 		s = api.LoggingMiddleware(logger)(s)
 		s = api.NewInstrumentingMiddleware(

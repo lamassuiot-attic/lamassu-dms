@@ -64,7 +64,11 @@ type healthResponse struct {
 type getCSRsRequest struct{}
 
 type getCSRsResponse struct {
-	CSRs csr.CSRs `json:"CSRs,omitempty"`
+	CSRs csr.CSRs `json:"csr"`
+}
+
+type getCSRsEmbeddedResponse struct {
+	CSRs csr.Data `json:"_embedded"`
 }
 
 type getCSRStatusRequest struct {
@@ -72,8 +76,8 @@ type getCSRStatusRequest struct {
 }
 
 type getCSRStatusResponse struct {
-	CSR csr.CSR `json:"CSR"`
-	Err error
+	CSR csr.CSR `json:"-"`
+	Err error   `json:"err,omitempty"`
 }
 
 func (r getCSRStatusResponse) error() error { return r.Err }

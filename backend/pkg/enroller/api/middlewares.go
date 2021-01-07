@@ -39,7 +39,6 @@ func (mw loggingMiddleware) GetCSRs(ctx context.Context) (csrs csrmodel.CSRs) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetCSRs",
-			"num_csrs", len(csrs.CSRs),
 			"took", time.Since(begin),
 		)
 	}(time.Now())

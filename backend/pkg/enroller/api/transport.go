@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"device-manufacturing-system/pkg/enroller/auth"
+	"device-manufacturing-system/pkg/enroller/models/csr"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -78,12 +79,7 @@ func decodeGetCSRsRequest(ctx context.Context, r *http.Request) (request interfa
 func encodeGetCSRsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	resp := response.(getCSRsResponse)
 	w.Header().Set("Content-Type", "application/hal+json; charset=utf-8")
-	embedHal := hal.NewResource(resp.CSRs, "http://localhost:8889/v1/csrs")
-	for _, csr := range resp.CSRs.CSRs {
-		csrHal := hal.NewResource(csr, "http://localhost:8889/v1/csrs/"+strconv.Itoa(csr.Id))
-		embedHal.Embed("csr", csrHal)
-	}
-	return json.NewEncoder(w).Encode(embedHal)
+	return json.NewEncoder(w).Encode(resp)
 }
 
 func decodeGetCSRStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
@@ -135,6 +131,14 @@ func encodeGetCRTRequest(ctx context.Context, r *http.Request, request interface
 
 }
 
+func decodeGetCRTResponse(_ context.Context, r *http.Response) (interface{}, error) {
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	return getCRTResponse{Data: data}, nil
+}
+
 func encodeGetCRTResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	resp := response.(getCRTResponse)
 	if resp.Err != nil {
@@ -146,12 +150,32 @@ func encodeGetCRTResponse(ctx context.Context, w http.ResponseWriter, response i
 	return nil
 }
 
-func decodeGetCRTResponse(_ context.Context, r *http.Response) (interface{}, error) {
-	data, err := ioutil.ReadAll(r.Body)
-	if err != nil {
+func encodeGetCSRsRequest(ctx context.Context, r *http.Request, request interface{}) error {
+	r.URL.Path = "/v1/csrs"
+	return encodeRequest(ctx, r, request)
+}
+
+func decodeGetCSRsResponse(ctx context.Context, r *http.Response) (interface{}, error) {
+	var response getCSRsEmbeddedResponse
+	if err := json.NewDecoder(r.Body).Decode(&response); err != nil {
 		return nil, err
 	}
-	return getCRTResponse{Data: data}, nil
+	return response, nil
+}
+
+func encodeGetCSRStatusRequest(ctx context.Context, r *http.Request, request interface{}) error {
+	req := request.(getCSRStatusRequest)
+	csrID := url.QueryEscape(strconv.Itoa(req.ID))
+	r.URL.Path = "/v1/csrs/" + csrID
+	return encodeRequest(ctx, r, request)
+}
+
+func decodeGetCSRStatusResponse(ctx context.Context, r *http.Response) (interface{}, error) {
+	var response csr.CSR
+	if err := json.NewDecoder(r.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func encodeRequest(_ context.Context, req *http.Request, request interface{}) error {
