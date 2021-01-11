@@ -6,20 +6,62 @@ import (
 	"device-manufacturing-system/pkg/enroller/models/csr"
 	csrmodel "device-manufacturing-system/pkg/enroller/models/csr"
 	"device-manufacturing-system/pkg/enroller/utils"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/go-kit/kit/auth/jwt"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/sd"
+	consulsd "github.com/go-kit/kit/sd/consul"
+	"github.com/go-kit/kit/sd/lb"
+	"github.com/hashicorp/consul/api"
 
 	httptransport "github.com/go-kit/kit/transport/http"
 )
 
-func ProxyingMiddleware(proxyURL string, proxyCA string, logger log.Logger) ServiceMiddleware {
+func ProxyingMiddleware(proxyURL string, proxyCA string, consulProtocol string, consulHost string, consulPort string, logger log.Logger) ServiceMiddleware {
 	return func(next Service) Service {
-		return proxymw{next, makeGetCSRsProxy(proxyURL, proxyCA), makeGetCSRStatusProxy(proxyURL, proxyCA), makeGetCRTProxy(proxyURL, proxyCA)}
+		consulConfig := api.DefaultConfig()
+		consulConfig.Address = consulProtocol + "://" + consulHost + ":" + consulPort
+		consulClient, err := api.NewClient(consulConfig)
+		if err != nil {
+			logger.Log("err", err, "msg", "Unable to start Consul client")
+			os.Exit(1)
+		}
+		tags := []string{"enroller", "enroller"}
+		passingOnly := true
+		duration := 500 * time.Millisecond
+		client := consulsd.NewClient(consulClient)
+		instancer := consulsd.NewInstancer(client, logger, "enroller", tags, passingOnly)
+
+		ctx := context.Background()
+
+		var getCSRsEndpoint, getCSRStatusEndpoint, getCRTEndpoint endpoint.Endpoint
+
+		getCSRsFactory := makeGetCSRsFactory(ctx, "GET", proxyURL, proxyCA)
+		getCSRsEndpointer := sd.NewEndpointer(instancer, getCSRsFactory, logger)
+		getCSRsBalancer := lb.NewRoundRobin(getCSRsEndpointer)
+		getCSRsRetry := lb.Retry(1, duration, getCSRsBalancer)
+		getCSRsEndpoint = getCSRsRetry
+
+		getCSRStatusFactory := makeGetCSRStatusFactory(ctx, "GET", proxyURL, proxyCA)
+		getCSRStatusEndpointer := sd.NewEndpointer(instancer, getCSRStatusFactory, logger)
+		getCSRStatusBalancer := lb.NewRoundRobin(getCSRStatusEndpointer)
+		getCSRStatusRetry := lb.Retry(1, duration, getCSRStatusBalancer)
+		getCSRStatusEndpoint = getCSRStatusRetry
+
+		getCRTFactory := makeGetCRTFactory(ctx, "GET", proxyURL, proxyCA)
+		getCRTEndpointer := sd.NewEndpointer(instancer, getCRTFactory, logger)
+		getCRTBalancer := lb.NewRoundRobin(getCRTEndpointer)
+		getCRTRetry := lb.Retry(1, duration, getCRTBalancer)
+		getCRTEndpoint = getCRTRetry
+
+		return proxymw{next, getCSRsEndpoint, getCSRStatusEndpoint, getCRTEndpoint}
 	}
 }
 
@@ -91,71 +133,78 @@ func makeProxyClient(u *url.URL, proxyCA string) *http.Client {
 	return httpc
 }
 
-func makeGetCSRStatusProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
-	if !strings.HasPrefix(proxyURL, "http") {
-		proxyURL = "http://" + proxyURL
+func makeGetCSRStatusFactory(_ context.Context, method, path, proxyCA string) sd.Factory {
+	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
+		if !strings.HasPrefix(instance, "http") {
+			instance = "http://" + instance
+		}
+		u, err := url.Parse(instance)
+		if err != nil {
+			panic(err)
+		}
+		httpc := makeProxyClient(u, proxyCA)
+		options := []httptransport.ClientOption{
+			httptransport.SetClient(httpc),
+			httptransport.ClientBefore(jwt.ContextToHTTP()),
+		}
+		return httptransport.NewClient(
+			method,
+			u,
+			encodeGetCSRStatusRequest,
+			decodeGetCSRStatusResponse,
+			options...,
+		).Endpoint(), nil, nil
 	}
-	u, err := url.Parse(proxyURL)
-	if err != nil {
-		panic(err)
-	}
-	httpc := makeProxyClient(u, proxyCA)
-	options := []httptransport.ClientOption{
-		httptransport.SetClient(httpc),
-		httptransport.ClientBefore(jwt.ContextToHTTP()),
-	}
-
-	return httptransport.NewClient(
-		"GET",
-		u,
-		encodeGetCSRStatusRequest,
-		decodeGetCSRStatusResponse,
-		options...,
-	).Endpoint()
 }
 
-func makeGetCSRsProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
-	if !strings.HasPrefix(proxyURL, "http") {
-		proxyURL = "http://" + proxyURL
-	}
-	u, err := url.Parse(proxyURL)
-	if err != nil {
-		panic(err)
-	}
-	httpc := makeProxyClient(u, proxyCA)
-	options := []httptransport.ClientOption{
-		httptransport.SetClient(httpc),
-		httptransport.ClientBefore(jwt.ContextToHTTP()),
+func makeGetCSRsFactory(_ context.Context, method, path, proxyCA string) sd.Factory {
+	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
+		if !strings.HasPrefix(instance, "http") {
+			instance = "http://" + instance
+		}
+		u, err := url.Parse(instance)
+		if err != nil {
+			panic(err)
+		}
+		httpc := makeProxyClient(u, proxyCA)
+		options := []httptransport.ClientOption{
+			httptransport.SetClient(httpc),
+			httptransport.ClientBefore(jwt.ContextToHTTP()),
+		}
+
+		return httptransport.NewClient(
+			method,
+			u,
+			encodeGetCSRsRequest,
+			decodeGetCSRsResponse,
+			options...,
+		).Endpoint(), nil, nil
 	}
 
-	return httptransport.NewClient(
-		"GET",
-		u,
-		encodeGetCSRsRequest,
-		decodeGetCSRsResponse,
-		options...,
-	).Endpoint()
 }
 
-func makeGetCRTProxy(proxyURL string, proxyCA string) endpoint.Endpoint {
-	if !strings.HasPrefix(proxyURL, "http") {
-		proxyURL = "http://" + proxyURL
-	}
-	u, err := url.Parse(proxyURL)
-	if err != nil {
-		panic(err)
-	}
-	httpc := makeProxyClient(u, proxyCA)
-	options := []httptransport.ClientOption{
-		httptransport.SetClient(httpc),
-		httptransport.ClientBefore(jwt.ContextToHTTP()),
+func makeGetCRTFactory(_ context.Context, method, path, proxyCA string) sd.Factory {
+	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
+		if !strings.HasPrefix(instance, "http") {
+			instance = "http://" + instance
+		}
+		u, err := url.Parse(instance)
+		if err != nil {
+			panic(err)
+		}
+		httpc := makeProxyClient(u, proxyCA)
+		options := []httptransport.ClientOption{
+			httptransport.SetClient(httpc),
+			httptransport.ClientBefore(jwt.ContextToHTTP()),
+		}
+
+		return httptransport.NewClient(
+			method,
+			u,
+			encodeGetCRTRequest,
+			decodeGetCRTResponse,
+			options...,
+		).Endpoint(), nil, nil
 	}
 
-	return httptransport.NewClient(
-		"GET",
-		u,
-		encodeGetCRTRequest,
-		decodeGetCRTResponse,
-		options...,
-	).Endpoint()
 }

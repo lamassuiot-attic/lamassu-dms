@@ -5,6 +5,7 @@ import (
 	"device-manufacturing-system/pkg/manufacturing/api"
 	"device-manufacturing-system/pkg/manufacturing/client/scep"
 	"device-manufacturing-system/pkg/manufacturing/configs"
+	"device-manufacturing-system/pkg/manufacturing/discovery/consul"
 	"flag"
 	"fmt"
 	"net/http"
@@ -39,7 +40,7 @@ func main() {
 
 	auth := auth.NewAuth(cfg.KeycloakHostname, cfg.KeycloakPort, cfg.KeycloakProtocol, cfg.KeycloakRealm, cfg.KeycloakCA)
 
-	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.ProxyAddress, cfg.SCEPMapping, cfg.ProxyCA, logger)
+	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.ProxyAddress, cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, cfg.SCEPMapping, cfg.ProxyCA, logger)
 
 	fieldKeys := []string{"method"}
 	var s api.Service
@@ -62,6 +63,11 @@ func main() {
 		)(s)
 	}
 
+	consulsd, err := consul.NewServiceDiscovery(cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, logger)
+	if err != nil {
+		panic(err)
+	}
+
 	mux := http.NewServeMux()
 
 	mux.Handle("/v1/", api.MakeHTTPHandler(s, log.With(logger, "component", "HTTP"), auth))
@@ -77,6 +83,7 @@ func main() {
 
 	go func() {
 		logger.Log("transport", "HTTP", "addr", "httpAddr")
+		consulsd.Register("https", "manufacturing", cfg.Port)
 		errs <- http.ListenAndServeTLS(*httpAddr, cfg.CertFile, cfg.KeyFile, nil)
 	}()
 

@@ -4,6 +4,7 @@ import (
 	"device-manufacturing-system/pkg/enroller/api"
 	"device-manufacturing-system/pkg/enroller/auth"
 	"device-manufacturing-system/pkg/enroller/configs"
+	"device-manufacturing-system/pkg/enroller/discovery/consul"
 	"fmt"
 	"net/http"
 	"os"
@@ -36,7 +37,7 @@ func main() {
 	var s api.Service
 	{
 		s = api.NewEnrrolerService()
-		s = api.ProxyingMiddleware(cfg.ProxyAddress, cfg.ProxyCA, logger)(s)
+		s = api.ProxyingMiddleware(cfg.ProxyAddress, cfg.ProxyCA, cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, logger)(s)
 		s = api.LoggingMiddleware(logger)(s)
 		s = api.NewInstrumentingMiddleware(
 			kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
@@ -54,6 +55,11 @@ func main() {
 		)(s)
 	}
 
+	consulsd, err := consul.NewServiceDiscovery(cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, logger)
+	if err != nil {
+		panic(err)
+	}
+
 	mux := http.NewServeMux()
 
 	mux.Handle("/v1/", api.MakeHTTPHandler(s, log.With(logger, "component", "HTTP"), auth))
@@ -69,10 +75,12 @@ func main() {
 
 	go func() {
 		logger.Log("transport", "HTTP", "addr", "httpAddr")
+		consulsd.Register("https", "manufacturingenroll", cfg.Port)
 		errs <- http.ListenAndServeTLS(":"+cfg.Port, cfg.CertFile, cfg.KeyFile, nil)
 	}()
 
 	logger.Log("exit", <-errs)
+	consulsd.Deregister()
 
 }
 

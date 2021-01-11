@@ -31,7 +31,7 @@ func MakeHTTPHandler(s Service, logger log.Logger, auth auth.Auth) http.Handler 
 		httptransport.ServerBefore(jwt.HTTPToContext()),
 	}
 
-	r.Methods("GET").Path("/v1/csrs/health").Handler(httptransport.NewServer(
+	r.Methods("GET").Path("/v1/health").Handler(httptransport.NewServer(
 		e.HealthEndpoint,
 		decodeHealthRequest,
 		encodeResponse,

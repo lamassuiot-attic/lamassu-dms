@@ -9,11 +9,9 @@ type Config struct {
 	UIPort     string
 	UIProtocol string
 
-	PostgresUser     string
-	PostgresDB       string
-	PostgresPassword string
-	PostgresHostname string
-	PostgresPort     string
+	ConsulProtocol string
+	ConsulHost     string
+	ConsulPort     string
 
 	KeycloakHostname string
 	KeycloakPort     string

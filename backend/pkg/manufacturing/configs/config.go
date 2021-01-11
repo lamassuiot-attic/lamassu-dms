@@ -17,6 +17,10 @@ type Config struct {
 	KeycloakRealm    string
 	KeycloakCA       string
 
+	ConsulProtocol string
+	ConsulHost     string
+	ConsulPort     string
+
 	CertFile     string
 	KeyFile      string
 	AuthKeyFile  string

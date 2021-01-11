@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	consulsd "github.com/go-kit/kit/sd/consul"
+	"github.com/hashicorp/consul/api"
 	scepclient "github.com/micromdm/scep/client"
 	"github.com/micromdm/scep/scep"
 )
@@ -24,13 +26,16 @@ const (
 )
 
 type SCEP struct {
-	keyFile      string
-	certFile     string
-	proxyAddress string
-	SCEPMapping  map[string]string
-	proxyCA      string
-	remote       scepclient.Client
-	logger       log.Logger
+	keyFile        string
+	certFile       string
+	proxyAddress   string
+	consulProtocol string
+	consulHost     string
+	consulPort     string
+	SCEPMapping    map[string]string
+	proxyCA        string
+	remote         scepclient.Client
+	logger         log.Logger
 }
 
 type CSROptions struct {
@@ -46,16 +51,20 @@ var (
 	ErrCSRRequestCreate  = errors.New("unable to create CSR request")
 	ErrGetRemoteCA       = errors.New("error getting remote CA certificate")
 	ErrRemoteConnection  = errors.New("error connecting to remote server")
+	ErrConsulConnection  = errors.New("error connecting to Service Discovery server")
 )
 
-func NewClient(certFile string, keyFile string, proxyAddress string, SCEPMapping map[string]string, proxyCA string, logger log.Logger) client.Client {
+func NewClient(certFile string, keyFile string, proxyAddress string, consulProtocol string, consulHost string, consulPort string, SCEPMapping map[string]string, proxyCA string, logger log.Logger) client.Client {
 	return &SCEP{
-		certFile:     certFile,
-		keyFile:      keyFile,
-		proxyAddress: proxyAddress,
-		SCEPMapping:  SCEPMapping,
-		proxyCA:      proxyCA,
-		logger:       logger,
+		certFile:       certFile,
+		keyFile:        keyFile,
+		proxyAddress:   proxyAddress,
+		consulProtocol: consulProtocol,
+		consulHost:     consulHost,
+		consulPort:     consulPort,
+		SCEPMapping:    SCEPMapping,
+		proxyCA:        proxyCA,
+		logger:         logger,
 	}
 }
 
@@ -75,11 +84,25 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 			},
 		},
 	}
-	client, err := scepclient.New(serverURL, s.logger, httpc)
+
+	consulConfig := api.DefaultConfig()
+	consulConfig.Address = s.consulProtocol + "://" + s.consulHost + ":" + s.consulPort
+	consulClient, err := api.NewClient(consulConfig)
+	if err != nil {
+		return ErrConsulConnection
+	}
+	clientConsul := consulsd.NewClient(consulClient)
+	tags := []string{"scep", s.SCEPMapping[CA]}
+	passingOnly := true
+	duration := 500 * time.Millisecond
+	instancer := consulsd.NewInstancer(clientConsul, s.logger, s.SCEPMapping[CA], tags, passingOnly)
+
+	//scepClient, err := scepclient.New(serverURL, s.logger, httpc)
+	scepClient, err := scepclient.NewSD(serverURL, duration, instancer, s.logger, httpc)
 	if err != nil {
 		return err
 	}
-	s.remote = client
+	s.remote = scepClient
 	_, err = s.remote.GetCACaps(ctx)
 	if err != nil {
 		return ErrRemoteConnection
