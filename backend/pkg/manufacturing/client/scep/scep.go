@@ -8,7 +8,6 @@ import (
 	"device-manufacturing-system/pkg/manufacturing/client"
 	"device-manufacturing-system/pkg/manufacturing/utils"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -89,6 +88,7 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 	consulConfig.Address = s.consulProtocol + "://" + s.consulHost + ":" + s.consulPort
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {
+		s.logger.Log("err", err, "msg", "Could not start Consul API client")
 		return ErrConsulConnection
 	}
 	clientConsul := consulsd.NewClient(consulClient)
@@ -97,14 +97,15 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 	duration := 500 * time.Millisecond
 	instancer := consulsd.NewInstancer(clientConsul, s.logger, s.SCEPMapping[CA], tags, passingOnly)
 
-	//scepClient, err := scepclient.New(serverURL, s.logger, httpc)
 	scepClient, err := scepclient.NewSD(serverURL, duration, instancer, s.logger, httpc)
 	if err != nil {
+		s.logger.Log("err", err, "msg", "Could not start SCEP Server client")
 		return err
 	}
 	s.remote = scepClient
 	_, err = s.remote.GetCACaps(ctx)
 	if err != nil {
+		s.logger.Log("err", err, "msg", "Could not get CA capabilities from SCEP Server")
 		return ErrRemoteConnection
 	}
 	return nil
@@ -118,10 +119,9 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 	key, err := makeKey(keyAlg, keySize)
 
 	sigCert, sigKey, err := loadSignerInfo(s.certFile, s.keyFile)
-	fmt.Println(sigCert.NotBefore)
-	fmt.Println(sigCert.NotAfter)
 
 	if err != nil {
+		s.logger.Log("err", err, "msg", "Could not load Signer information")
 		return nil, nil, ErrSignerInfoLoading
 	}
 
@@ -138,11 +138,13 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 
 	csr, err := makeCSR(opts)
 	if err != nil {
+		s.logger.Log("err", err, "msg", "Could not create CSR")
 		return nil, nil, ErrCSRCreate
 	}
 
 	resp, certNum, err := s.remote.GetCACert(ctx)
 	if err != nil {
+		s.logger.Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
 		return nil, nil, ErrGetRemoteCA
 	}
 
@@ -151,14 +153,17 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 		if certNum > 1 {
 			certs, err = scep.CACerts(resp)
 			if err != nil {
+				s.logger.Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
 				return nil, nil, ErrGetRemoteCA
 			}
 			if len(certs) < 1 {
+				s.logger.Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
 				return nil, nil, ErrGetRemoteCA
 			}
 		} else {
 			certs, err = x509.ParseCertificates(resp)
 			if err != nil {
+				s.logger.Log("err", err, "msg", "Could not parse CA certificate obtained from SCEP Server")
 				return nil, nil, ErrGetRemoteCA
 			}
 		}
@@ -178,6 +183,7 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 
 	msg, err := scep.NewCSRRequest(csr, tmpl)
 	if err != nil {
+		s.logger.Log("err", err, "msg", "Could not create CSR Request SCEP message")
 		return nil, nil, ErrCSRRequestCreate
 	}
 
@@ -189,17 +195,20 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 
 		respBytes, err := s.remote.PKIOperation(ctx, msg.Raw)
 		if err != nil {
+			s.logger.Log("err", err, "msg", "Could not perform PKI operation")
 			return nil, nil, ErrPKIOperation
 		}
 
 		respMsg, err = scep.ParsePKIMessage(respBytes)
 		if err != nil {
+			s.logger.Log("err", err, "msg", "Could not parse PKI message")
 			return nil, nil, err
 		}
 
 		switch respMsg.PKIStatus {
 		case scep.FAILURE:
 			err = encodeSCEPFailure(respMsg.FailInfo)
+			s.logger.Log("err", err, "msg", "PKI operation failure")
 			return nil, nil, err
 		case scep.PENDING:
 			time.Sleep(30 * time.Second)
@@ -209,6 +218,7 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 	}
 
 	if err := respMsg.DecryptPKIEnvelope(sigCert, sigKey); err != nil {
+		s.logger.Log("err", err, "msg", "Could not decrypt PKI envelope")
 		return nil, nil, ErrPKIOperation
 	}
 	respCert := respMsg.CertRepMessage.Certificate

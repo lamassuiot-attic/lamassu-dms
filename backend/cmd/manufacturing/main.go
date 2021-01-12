@@ -6,7 +6,6 @@ import (
 	"device-manufacturing-system/pkg/manufacturing/client/scep"
 	"device-manufacturing-system/pkg/manufacturing/configs"
 	"device-manufacturing-system/pkg/manufacturing/discovery/consul"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,22 +19,17 @@ import (
 )
 
 func main() {
-
-	cfg, err := configs.NewConfig("manufacturing")
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		httpAddr = flag.String("http.addr", ":"+cfg.Port, "HTTP listen address")
-	)
-	flag.Parse()
-
 	var logger log.Logger
 	{
 		logger = log.NewLogfmtLogger(os.Stderr)
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 		logger = log.With(logger, "caller", log.DefaultCaller)
+	}
+
+	cfg, err := configs.NewConfig("manufacturing")
+	if err != nil {
+		logger.Log("err", err, "msg", "Could not read environment configuration values")
+		os.Exit(1)
 	}
 
 	auth := auth.NewAuth(cfg.KeycloakHostname, cfg.KeycloakPort, cfg.KeycloakProtocol, cfg.KeycloakRealm, cfg.KeycloakCA)
@@ -65,7 +59,8 @@ func main() {
 
 	consulsd, err := consul.NewServiceDiscovery(cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, logger)
 	if err != nil {
-		panic(err)
+		logger.Log("err", err, "msg", "Could not start connection with Consul Service Discovery")
+		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
@@ -84,7 +79,7 @@ func main() {
 	go func() {
 		logger.Log("transport", "HTTP", "addr", "httpAddr")
 		consulsd.Register("https", "manufacturing", cfg.Port)
-		errs <- http.ListenAndServeTLS(*httpAddr, cfg.CertFile, cfg.KeyFile, nil)
+		errs <- http.ListenAndServeTLS(":"+cfg.Port, cfg.CertFile, cfg.KeyFile, nil)
 	}()
 
 	logger.Log("exit", <-errs)

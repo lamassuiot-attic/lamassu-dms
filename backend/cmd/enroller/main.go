@@ -18,17 +18,17 @@ import (
 )
 
 func main() {
-
-	cfg, err := configs.NewConfig("enroller")
-	if err != nil {
-		panic(err)
-	}
-
 	var logger log.Logger
 	{
 		logger = log.NewLogfmtLogger(os.Stderr)
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 		logger = log.With(logger, "caller", log.DefaultCaller)
+	}
+
+	cfg, err := configs.NewConfig("enroller")
+	if err != nil {
+		logger.Log("err", err, "msg", "Could not read environment configuration values")
+		os.Exit(1)
 	}
 
 	auth := auth.NewAuth(cfg.KeycloakHostname, cfg.KeycloakPort, cfg.KeycloakProtocol, cfg.KeycloakRealm, cfg.KeycloakCA)
@@ -57,7 +57,8 @@ func main() {
 
 	consulsd, err := consul.NewServiceDiscovery(cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, logger)
 	if err != nil {
-		panic(err)
+		logger.Log("err", err, "msg", "Could not start connection with Consul Service Discovery")
+		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
