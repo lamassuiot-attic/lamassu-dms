@@ -8,6 +8,7 @@ import (
 	"device-manufacturing-system/pkg/enroller/discovery"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	consulsd "github.com/go-kit/kit/sd/consul"
 	"github.com/hashicorp/consul/api"
 )
@@ -23,6 +24,7 @@ func NewServiceDiscovery(consulProtocol string, consulHost string, consulPort st
 	consulConfig.Address = consulProtocol + "://" + consulHost + ":" + consulPort
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {
+		level.Error(logger).Log("err", err, "msg", "Could not start Consul API Client")
 		return nil, err
 	}
 	client := consulsd.NewClient(consulClient)
@@ -43,7 +45,7 @@ func (sd *ServiceDiscovery) Register(advProtocol string, advHost string, advPort
 	asr := api.AgentServiceRegistration{
 		ID:      "manufacturingenroll" + strconv.Itoa(num),
 		Name:    "manufacturingenroll",
-		Address: advProtocol + "://" + advHost,
+		Address: advHost,
 		Port:    port,
 		Tags:    []string{"manufacturingenroll", "device-manufacturing-system"},
 		Check:   &check,

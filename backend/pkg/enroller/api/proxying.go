@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/auth/jwt"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/go-kit/kit/sd"
 	consulsd "github.com/go-kit/kit/sd/consul"
 	"github.com/go-kit/kit/sd/lb"
@@ -30,7 +31,7 @@ func ProxyingMiddleware(proxyURL string, proxyCA string, consulProtocol string, 
 		consulConfig.Address = consulProtocol + "://" + consulHost + ":" + consulPort
 		consulClient, err := api.NewClient(consulConfig)
 		if err != nil {
-			logger.Log("err", err, "msg", "Unable to start Consul client")
+			level.Error(logger).Log("err", err, "msg", "Could not start Consul API Client")
 			os.Exit(1)
 		}
 		tags := []string{"enroller", "enroller"}
@@ -61,12 +62,13 @@ func ProxyingMiddleware(proxyURL string, proxyCA string, consulProtocol string, 
 		getCRTRetry := lb.Retry(1, duration, getCRTBalancer)
 		getCRTEndpoint = getCRTRetry
 
-		return proxymw{next, getCSRsEndpoint, getCSRStatusEndpoint, getCRTEndpoint}
+		return proxymw{next, logger, getCSRsEndpoint, getCSRStatusEndpoint, getCRTEndpoint}
 	}
 }
 
 type proxymw struct {
 	next         Service
+	logger       log.Logger
 	getCSRs      endpoint.Endpoint
 	getCSRStatus endpoint.Endpoint
 	getCRT       endpoint.Endpoint
@@ -77,8 +79,10 @@ func (mw proxymw) Health(ctx context.Context) bool {
 }
 
 func (mw proxymw) GetCSRs(ctx context.Context) csrmodel.CSRs {
+	level.Info(mw.logger).Log("msg", "Proxying GetCSRs request to Enroller")
 	response, err := mw.getCSRs(ctx, getCSRsRequest{})
 	if err != nil {
+		level.Error(mw.logger).Log("err", err, "msg", "Error proxying GetCSRs request to Enroller")
 		return csrmodel.CSRs{}
 	}
 	resp := response.(getCSRsEmbeddedResponse)
@@ -92,8 +96,10 @@ func (mw proxymw) GetCSRs(ctx context.Context) csrmodel.CSRs {
 }
 
 func (mw proxymw) GetCSRStatus(ctx context.Context, id int) (csrmodel.CSR, error) {
+	level.Info(mw.logger).Log("msg", "Proxying GetCSRStatus request to Enroller")
 	response, err := mw.getCSRStatus(ctx, getCSRStatusRequest{ID: id})
 	if err != nil {
+		level.Error(mw.logger).Log("err", err, "msg", "Error proxying GetCSRStatus request to Enroller")
 		return csrmodel.CSR{}, err
 	}
 	resp := response.(csr.CSR)
@@ -101,8 +107,10 @@ func (mw proxymw) GetCSRStatus(ctx context.Context, id int) (csrmodel.CSR, error
 }
 
 func (mw proxymw) GetCRT(ctx context.Context, id int) ([]byte, error) {
+	level.Info(mw.logger).Log("msg", "Proxying GetCRT request to Enroller")
 	response, err := mw.getCRT(ctx, getCRTRequest{ID: id})
 	if err != nil {
+		level.Error(mw.logger).Log("err", err, "msg", "Error proxying GetCRT request to Enroller")
 		return nil, err
 	}
 	resp := response.(getCRTResponse)
@@ -135,8 +143,8 @@ func makeProxyClient(u *url.URL, proxyCA string) *http.Client {
 
 func makeGetCSRStatusFactory(_ context.Context, method, path, proxyCA string) sd.Factory {
 	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
-		if !strings.HasPrefix(instance, "http") {
-			instance = "http://" + instance
+		if !strings.HasPrefix(instance, "https") {
+			instance = "https://" + instance
 		}
 		u, err := url.Parse(instance)
 		if err != nil {
