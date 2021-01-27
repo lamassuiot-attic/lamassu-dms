@@ -16,21 +16,26 @@ import (
 	"github.com/go-kit/kit/auth/jwt"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/go-kit/kit/sd"
 	consulsd "github.com/go-kit/kit/sd/consul"
 	"github.com/go-kit/kit/sd/lb"
+	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/hashicorp/consul/api"
+	stdopentracing "github.com/opentracing/opentracing-go"
 
 	httptransport "github.com/go-kit/kit/transport/http"
 )
 
-func ProxyingMiddleware(proxyURL string, proxyCA string, consulProtocol string, consulHost string, consulPort string, logger log.Logger) ServiceMiddleware {
+func ProxyingMiddleware(proxyURL string, proxyCA string, consulProtocol string, consulHost string, consulPort string, consulCA string, logger log.Logger, otTracer stdopentracing.Tracer) ServiceMiddleware {
 	return func(next Service) Service {
 		consulConfig := api.DefaultConfig()
 		consulConfig.Address = consulProtocol + "://" + consulHost + ":" + consulPort
+		tlsConf := &api.TLSConfig{CAFile: consulCA}
+		consulConfig.TLSConfig = *tlsConf
 		consulClient, err := api.NewClient(consulConfig)
 		if err != nil {
-			logger.Log("err", err, "msg", "Unable to start Consul client")
+			level.Error(logger).Log("err", err, "msg", "Could not start Consul API Client")
 			os.Exit(1)
 		}
 		tags := []string{"enroller", "enroller"}
@@ -43,30 +48,34 @@ func ProxyingMiddleware(proxyURL string, proxyCA string, consulProtocol string, 
 
 		var getCSRsEndpoint, getCSRStatusEndpoint, getCRTEndpoint endpoint.Endpoint
 
-		getCSRsFactory := makeGetCSRsFactory(ctx, "GET", proxyURL, proxyCA)
+		getCSRsFactory := makeGetCSRsFactory(ctx, "GET", proxyURL, proxyCA, logger, otTracer)
 		getCSRsEndpointer := sd.NewEndpointer(instancer, getCSRsFactory, logger)
 		getCSRsBalancer := lb.NewRoundRobin(getCSRsEndpointer)
 		getCSRsRetry := lb.Retry(1, duration, getCSRsBalancer)
 		getCSRsEndpoint = getCSRsRetry
+		getCSRsEndpoint = opentracing.TraceClient(otTracer, "GetPendingCSRs")(getCSRsEndpoint)
 
-		getCSRStatusFactory := makeGetCSRStatusFactory(ctx, "GET", proxyURL, proxyCA)
+		getCSRStatusFactory := makeGetCSRStatusFactory(ctx, "GET", proxyURL, proxyCA, logger, otTracer)
 		getCSRStatusEndpointer := sd.NewEndpointer(instancer, getCSRStatusFactory, logger)
 		getCSRStatusBalancer := lb.NewRoundRobin(getCSRStatusEndpointer)
 		getCSRStatusRetry := lb.Retry(1, duration, getCSRStatusBalancer)
 		getCSRStatusEndpoint = getCSRStatusRetry
+		getCSRStatusEndpoint = opentracing.TraceClient(otTracer, "GetPendingCSRDB")(getCSRStatusEndpoint)
 
-		getCRTFactory := makeGetCRTFactory(ctx, "GET", proxyURL, proxyCA)
+		getCRTFactory := makeGetCRTFactory(ctx, "GET", proxyURL, proxyCA, logger, otTracer)
 		getCRTEndpointer := sd.NewEndpointer(instancer, getCRTFactory, logger)
 		getCRTBalancer := lb.NewRoundRobin(getCRTEndpointer)
 		getCRTRetry := lb.Retry(1, duration, getCRTBalancer)
 		getCRTEndpoint = getCRTRetry
+		getCRTEndpoint = opentracing.TraceClient(otTracer, "GetCRT")(getCRTEndpoint)
 
-		return proxymw{next, getCSRsEndpoint, getCSRStatusEndpoint, getCRTEndpoint}
+		return proxymw{next, logger, getCSRsEndpoint, getCSRStatusEndpoint, getCRTEndpoint}
 	}
 }
 
 type proxymw struct {
 	next         Service
+	logger       log.Logger
 	getCSRs      endpoint.Endpoint
 	getCSRStatus endpoint.Endpoint
 	getCRT       endpoint.Endpoint
@@ -77,8 +86,10 @@ func (mw proxymw) Health(ctx context.Context) bool {
 }
 
 func (mw proxymw) GetCSRs(ctx context.Context) csrmodel.CSRs {
+	level.Info(mw.logger).Log("msg", "Proxying GetCSRs request to Enroller")
 	response, err := mw.getCSRs(ctx, getCSRsRequest{})
 	if err != nil {
+		level.Error(mw.logger).Log("err", err, "msg", "Error proxying GetCSRs request to Enroller")
 		return csrmodel.CSRs{}
 	}
 	resp := response.(getCSRsEmbeddedResponse)
@@ -92,8 +103,10 @@ func (mw proxymw) GetCSRs(ctx context.Context) csrmodel.CSRs {
 }
 
 func (mw proxymw) GetCSRStatus(ctx context.Context, id int) (csrmodel.CSR, error) {
+	level.Info(mw.logger).Log("msg", "Proxying GetCSRStatus request to Enroller")
 	response, err := mw.getCSRStatus(ctx, getCSRStatusRequest{ID: id})
 	if err != nil {
+		level.Error(mw.logger).Log("err", err, "msg", "Error proxying GetCSRStatus request to Enroller")
 		return csrmodel.CSR{}, err
 	}
 	resp := response.(csr.CSR)
@@ -101,8 +114,10 @@ func (mw proxymw) GetCSRStatus(ctx context.Context, id int) (csrmodel.CSR, error
 }
 
 func (mw proxymw) GetCRT(ctx context.Context, id int) ([]byte, error) {
+	level.Info(mw.logger).Log("msg", "Proxying GetCRT request to Enroller")
 	response, err := mw.getCRT(ctx, getCRTRequest{ID: id})
 	if err != nil {
+		level.Error(mw.logger).Log("err", err, "msg", "Error proxying GetCRT request to Enroller")
 		return nil, err
 	}
 	resp := response.(getCRTResponse)
@@ -133,10 +148,10 @@ func makeProxyClient(u *url.URL, proxyCA string) *http.Client {
 	return httpc
 }
 
-func makeGetCSRStatusFactory(_ context.Context, method, path, proxyCA string) sd.Factory {
+func makeGetCSRStatusFactory(_ context.Context, method, path, proxyCA string, logger log.Logger, otTracer stdopentracing.Tracer) sd.Factory {
 	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
-		if !strings.HasPrefix(instance, "http") {
-			instance = "http://" + instance
+		if !strings.HasPrefix(instance, "https") {
+			instance = "https://" + instance
 		}
 		u, err := url.Parse(instance)
 		if err != nil {
@@ -152,15 +167,15 @@ func makeGetCSRStatusFactory(_ context.Context, method, path, proxyCA string) sd
 			u,
 			encodeGetCSRStatusRequest,
 			decodeGetCSRStatusResponse,
-			options...,
+			append(options, httptransport.ClientBefore(opentracing.ContextToHTTP(otTracer, logger)))...,
 		).Endpoint(), nil, nil
 	}
 }
 
-func makeGetCSRsFactory(_ context.Context, method, path, proxyCA string) sd.Factory {
+func makeGetCSRsFactory(_ context.Context, method, path, proxyCA string, logger log.Logger, otTracer stdopentracing.Tracer) sd.Factory {
 	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
 		if !strings.HasPrefix(instance, "http") {
-			instance = "http://" + instance
+			instance = "https://" + instance
 		}
 		u, err := url.Parse(instance)
 		if err != nil {
@@ -177,16 +192,16 @@ func makeGetCSRsFactory(_ context.Context, method, path, proxyCA string) sd.Fact
 			u,
 			encodeGetCSRsRequest,
 			decodeGetCSRsResponse,
-			options...,
+			append(options, httptransport.ClientBefore(opentracing.ContextToHTTP(otTracer, logger)))...,
 		).Endpoint(), nil, nil
 	}
 
 }
 
-func makeGetCRTFactory(_ context.Context, method, path, proxyCA string) sd.Factory {
+func makeGetCRTFactory(_ context.Context, method, path, proxyCA string, logger log.Logger, otTracer stdopentracing.Tracer) sd.Factory {
 	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
 		if !strings.HasPrefix(instance, "http") {
-			instance = "http://" + instance
+			instance = "https://" + instance
 		}
 		u, err := url.Parse(instance)
 		if err != nil {
@@ -203,7 +218,7 @@ func makeGetCRTFactory(_ context.Context, method, path, proxyCA string) sd.Facto
 			u,
 			encodeGetCRTRequest,
 			decodeGetCRTResponse,
-			options...,
+			append(options, httptransport.ClientBefore(opentracing.ContextToHTTP(otTracer, logger)))...,
 		).Endpoint(), nil, nil
 	}
 

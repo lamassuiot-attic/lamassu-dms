@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	consulsd "github.com/go-kit/kit/sd/consul"
 	"github.com/hashicorp/consul/api"
 	scepclient "github.com/micromdm/scep/client"
 	"github.com/micromdm/scep/scep"
+	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -31,10 +33,12 @@ type SCEP struct {
 	consulProtocol string
 	consulHost     string
 	consulPort     string
+	consulCA       string
 	SCEPMapping    map[string]string
 	proxyCA        string
 	remote         scepclient.Client
 	logger         log.Logger
+	otTracer       stdopentracing.Tracer
 }
 
 type CSROptions struct {
@@ -53,7 +57,7 @@ var (
 	ErrConsulConnection  = errors.New("error connecting to Service Discovery server")
 )
 
-func NewClient(certFile string, keyFile string, proxyAddress string, consulProtocol string, consulHost string, consulPort string, SCEPMapping map[string]string, proxyCA string, logger log.Logger) client.Client {
+func NewClient(certFile string, keyFile string, proxyAddress string, consulProtocol string, consulHost string, consulPort string, consulCA string, SCEPMapping map[string]string, proxyCA string, logger log.Logger, otTracer stdopentracing.Tracer) client.Client {
 	return &SCEP{
 		certFile:       certFile,
 		keyFile:        keyFile,
@@ -61,9 +65,11 @@ func NewClient(certFile string, keyFile string, proxyAddress string, consulProto
 		consulProtocol: consulProtocol,
 		consulHost:     consulHost,
 		consulPort:     consulPort,
+		consulCA:       consulCA,
 		SCEPMapping:    SCEPMapping,
 		proxyCA:        proxyCA,
 		logger:         logger,
+		otTracer:       otTracer,
 	}
 }
 
@@ -72,6 +78,7 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 	serverURL := s.proxyAddress + "/" + s.SCEPMapping[CA] + "/"
 	caCertPool, err := utils.CreateCAPool(s.proxyCA)
 	if err != nil {
+		level.Error(s.logger).Log("err", err, "msg", "Could not create CA Pool to validate SCEP Proxy server")
 		return err
 	}
 
@@ -86,9 +93,11 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 
 	consulConfig := api.DefaultConfig()
 	consulConfig.Address = s.consulProtocol + "://" + s.consulHost + ":" + s.consulPort
+	tlsConf := &api.TLSConfig{CAFile: s.consulCA}
+	consulConfig.TLSConfig = *tlsConf
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {
-		s.logger.Log("err", err, "msg", "Could not start Consul API client")
+		level.Error(s.logger).Log("err", err, "msg", "Could not start Consul API Client")
 		return ErrConsulConnection
 	}
 	clientConsul := consulsd.NewClient(consulClient)
@@ -97,17 +106,19 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 	duration := 500 * time.Millisecond
 	instancer := consulsd.NewInstancer(clientConsul, s.logger, s.SCEPMapping[CA], tags, passingOnly)
 
-	scepClient, err := scepclient.NewSD(serverURL, duration, instancer, s.logger, httpc)
+	scepClient, err := scepclient.NewSD(serverURL, duration, instancer, s.logger, httpc, s.otTracer)
 	if err != nil {
-		s.logger.Log("err", err, "msg", "Could not start SCEP Server client")
+		level.Error(s.logger).Log("err", err, "msg", "Could not start SCEP Server Client")
 		return err
 	}
 	s.remote = scepClient
+	level.Info(s.logger).Log("msg", "SCEP Server Client started")
 	_, err = s.remote.GetCACaps(ctx)
 	if err != nil {
-		s.logger.Log("err", err, "msg", "Could not get CA capabilities from SCEP Server")
+		level.Error(s.logger).Log("err", err, "msg", "Could not get CA capabilities from SCEP Server")
 		return ErrRemoteConnection
 	}
+	level.Info(s.logger).Log("msg", "SCEP Server CA capabilities succesfully obtained")
 	return nil
 }
 
@@ -115,15 +126,21 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 	ctx := context.Background()
 
 	sigAlgo := s.checkSignatureAlgorithm(keyAlg)
+	level.Info(s.logger).Log("msg", "SCEP Server signature algorithm checked")
 
 	key, err := makeKey(keyAlg, keySize)
+	if err != nil {
+		level.Error(s.logger).Log("err", err, "msg", "Could not create key for SCEP request")
+		return nil, nil, err
+	}
+	level.Info(s.logger).Log("msg", "Key for SCEP request created")
 
 	sigCert, sigKey, err := loadSignerInfo(s.certFile, s.keyFile)
-
 	if err != nil {
-		s.logger.Log("err", err, "msg", "Could not load Signer information")
+		level.Error(s.logger).Log("err", err, "msg", "Could not load SCEP request signer information")
 		return nil, nil, ErrSignerInfoLoading
 	}
+	level.Info(s.logger).Log("msg", "SCEP request signer information loaded")
 
 	opts := &CSROptions{
 		cn:       cn,
@@ -138,13 +155,14 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 
 	csr, err := makeCSR(opts)
 	if err != nil {
-		s.logger.Log("err", err, "msg", "Could not create CSR")
+		level.Error(s.logger).Log("err", err, "msg", "Could not create CSR for SCEP request")
 		return nil, nil, ErrCSRCreate
 	}
+	level.Info(s.logger).Log("msg", "CSR for SCEP request created")
 
 	resp, certNum, err := s.remote.GetCACert(ctx)
 	if err != nil {
-		s.logger.Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
+		level.Error(s.logger).Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
 		return nil, nil, ErrGetRemoteCA
 	}
 
@@ -153,21 +171,22 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 		if certNum > 1 {
 			certs, err = scep.CACerts(resp)
 			if err != nil {
-				s.logger.Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
+				level.Error(s.logger).Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
 				return nil, nil, ErrGetRemoteCA
 			}
 			if len(certs) < 1 {
-				s.logger.Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
+				level.Error(s.logger).Log("err", err, "msg", "Could not get CA certificate from SCEP Server")
 				return nil, nil, ErrGetRemoteCA
 			}
 		} else {
 			certs, err = x509.ParseCertificates(resp)
 			if err != nil {
-				s.logger.Log("err", err, "msg", "Could not parse CA certificate obtained from SCEP Server")
+				level.Error(s.logger).Log("err", err, "msg", "Could not parse CA certificate obtained from SCEP Server")
 				return nil, nil, ErrGetRemoteCA
 			}
 		}
 	}
+	level.Info(s.logger).Log("msg", "CA certificate obtained from SCEP Server")
 
 	var msgType scep.MessageType
 	{
@@ -183,9 +202,10 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 
 	msg, err := scep.NewCSRRequest(csr, tmpl)
 	if err != nil {
-		s.logger.Log("err", err, "msg", "Could not create CSR Request SCEP message")
+		level.Error(s.logger).Log("err", err, "msg", "Could not create CSR Request SCEP message")
 		return nil, nil, ErrCSRRequestCreate
 	}
+	level.Info(s.logger).Log("msg", "SCEP CSR Request message created")
 
 	var respMsg *scep.PKIMessage
 
@@ -195,20 +215,20 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 
 		respBytes, err := s.remote.PKIOperation(ctx, msg.Raw)
 		if err != nil {
-			s.logger.Log("err", err, "msg", "Could not perform PKI operation")
+			level.Error(s.logger).Log("err", err, "msg", "Could not perform PKI operation")
 			return nil, nil, ErrPKIOperation
 		}
 
 		respMsg, err = scep.ParsePKIMessage(respBytes)
 		if err != nil {
-			s.logger.Log("err", err, "msg", "Could not parse PKI message")
+			level.Error(s.logger).Log("err", err, "msg", "Could not parse PKI message")
 			return nil, nil, err
 		}
 
 		switch respMsg.PKIStatus {
 		case scep.FAILURE:
 			err = encodeSCEPFailure(respMsg.FailInfo)
-			s.logger.Log("err", err, "msg", "PKI operation failure")
+			level.Error(s.logger).Log("err", err, "msg", "PKI operation failed")
 			return nil, nil, err
 		case scep.PENDING:
 			time.Sleep(30 * time.Second)
@@ -216,12 +236,14 @@ func (s *SCEP) GetCertificate(keyAlg string, keySize int, c string, st string, l
 		}
 		break // on scep.SUCCESS
 	}
+	level.Info(s.logger).Log("msg", "PKI operation performed successfully")
 
 	if err := respMsg.DecryptPKIEnvelope(sigCert, sigKey); err != nil {
-		s.logger.Log("err", err, "msg", "Could not decrypt PKI envelope")
+		level.Error(s.logger).Log("err", err, "msg", "Could not decrypt PKI envelope")
 		return nil, nil, ErrPKIOperation
 	}
 	respCert := respMsg.CertRepMessage.Certificate
+	level.Info(s.logger).Log("msg", "PKI envelope decrypted and certificate obtained")
 	return respCert, key, nil
 }
 

@@ -9,8 +9,6 @@ type Config struct {
 	UIPort     string
 	UIProtocol string
 
-	CAPath string
-
 	KeycloakHostname string
 	KeycloakPort     string
 	KeycloakProtocol string
@@ -20,6 +18,7 @@ type Config struct {
 	ConsulProtocol string
 	ConsulHost     string
 	ConsulPort     string
+	ConsulCA       string
 
 	CertFile     string
 	KeyFile      string

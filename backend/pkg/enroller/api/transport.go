@@ -14,16 +14,18 @@ import (
 	stdjwt "github.com/dgrijalva/jwt-go"
 	"github.com/go-kit/kit/auth/jwt"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/nvellon/hal"
+	stdopentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 )
 
-func MakeHTTPHandler(s Service, logger log.Logger, auth auth.Auth) http.Handler {
+func MakeHTTPHandler(s Service, logger log.Logger, auth auth.Auth, otTracer stdopentracing.Tracer) http.Handler {
 	r := mux.NewRouter()
-	e := MakeServerEndpoints(s)
+	e := MakeServerEndpoints(s, otTracer)
 
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
@@ -35,28 +37,28 @@ func MakeHTTPHandler(s Service, logger log.Logger, auth auth.Auth) http.Handler 
 		e.HealthEndpoint,
 		decodeHealthRequest,
 		encodeResponse,
-		options...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)))...,
 	))
 
 	r.Methods("GET").Path("/v1/csrs").Handler(httptransport.NewServer(
 		jwt.NewParser(auth.Kf, stdjwt.SigningMethodRS256, auth.KeycloakClaimsFactory)(e.GetCSRsEndpoint),
 		decodeGetCSRsRequest,
 		encodeGetCSRsResponse,
-		options...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetPendingCSRs", logger)))...,
 	))
 	r.
 		Methods("GET").Path("/v1/csrs/{id}").Handler(httptransport.NewServer(
 		jwt.NewParser(auth.Kf, stdjwt.SigningMethodRS256, auth.KeycloakClaimsFactory)(e.GetCSRStatusEndpoint),
 		decodeGetCSRStatusRequest,
 		encodeGetCSRStatusResponse,
-		options...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetPendingCSRDB", logger)))...,
 	))
 
 	r.Methods("GET").Path("/v1/csrs/{id}/crt").Handler(httptransport.NewServer(
 		jwt.NewParser(auth.Kf, stdjwt.SigningMethodRS256, auth.KeycloakClaimsFactory)(e.GetCRTEndpoint),
 		decodeGetCRTRequest,
 		encodeGetCRTResponse,
-		options...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetPendingCSRFile", logger)))...,
 	))
 
 	return r

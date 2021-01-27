@@ -12,6 +12,7 @@ type Config struct {
 	ConsulProtocol string
 	ConsulHost     string
 	ConsulPort     string
+	ConsulCA       string
 
 	KeycloakHostname string
 	KeycloakPort     string

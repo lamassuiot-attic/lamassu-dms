@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/go-kit/kit/endpoint"
+	"github.com/go-kit/kit/tracing/opentracing"
+	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -12,11 +14,26 @@ type Endpoints struct {
 	PostGetCRTEndpoint    endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s Service) Endpoints {
+func MakeServerEndpoints(s Service, otTracer stdopentracing.Tracer) Endpoints {
+	var healthEndpoint endpoint.Endpoint
+	{
+		healthEndpoint = MakeHealthEndpoint(s)
+		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
+	}
+	var postSetConfigEndpoint endpoint.Endpoint
+	{
+		postSetConfigEndpoint = MakePostSetConfigEndpoint(s)
+		postSetConfigEndpoint = opentracing.TraceServer(otTracer, "PostSetConfig")(postSetConfigEndpoint)
+	}
+	var postGetCRTEndpoint endpoint.Endpoint
+	{
+		postGetCRTEndpoint = MakePostGetCRTEndpoint(s)
+		postGetCRTEndpoint = opentracing.TraceServer(otTracer, "PostGetCRT")(postGetCRTEndpoint)
+	}
 	return Endpoints{
-		HealthEndpoint:        MakeHealthEndpoint(s),
-		PostSetConfigEndpoint: MakePostSetConfigEndpoint(s),
-		PostGetCRTEndpoint:    MakePostGetCRTEndpoint(s),
+		HealthEndpoint:        healthEndpoint,
+		PostSetConfigEndpoint: postSetConfigEndpoint,
+		PostGetCRTEndpoint:    postGetCRTEndpoint,
 	}
 }
 

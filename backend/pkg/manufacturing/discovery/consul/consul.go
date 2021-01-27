@@ -8,21 +8,25 @@ import (
 	"device-manufacturing-system/pkg/manufacturing/discovery"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	consulsd "github.com/go-kit/kit/sd/consul"
 	"github.com/hashicorp/consul/api"
 )
 
 type ServiceDiscovery struct {
-	client    consulsd.Client
-	logger    log.Logger
-	registrar *consulsd.Registrar
+	client       consulsd.Client
+	logger       log.Logger
+	registration *api.AgentServiceRegistration
 }
 
-func NewServiceDiscovery(consulProtocol string, consulHost string, consulPort string, logger log.Logger) (discovery.Service, error) {
+func NewServiceDiscovery(consulProtocol string, consulHost string, consulPort string, CA string, logger log.Logger) (discovery.Service, error) {
 	consulConfig := api.DefaultConfig()
 	consulConfig.Address = consulProtocol + "://" + consulHost + ":" + consulPort
+	tlsConf := &api.TLSConfig{CAFile: CA}
+	consulConfig.TLSConfig = *tlsConf
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {
+		level.Error(logger).Log("err", err, "msg", "Could not start Consul API Client")
 		return nil, err
 	}
 	client := consulsd.NewClient(consulClient)
@@ -43,17 +47,15 @@ func (sd *ServiceDiscovery) Register(advProtocol string, advHost string, advPort
 	asr := api.AgentServiceRegistration{
 		ID:      "manufacturing" + strconv.Itoa(num),
 		Name:    "manufacturing",
-		Address: advProtocol + "://" + advHost,
+		Address: advHost,
 		Port:    port,
 		Tags:    []string{"manufacturing", "device-manufacturing-system"},
 		Check:   &check,
 	}
-	sd.registrar = consulsd.NewRegistrar(sd.client, &asr, sd.logger)
-	sd.registrar.Register()
-	return nil
+	sd.registration = &asr
+	return sd.client.Register(sd.registration)
 }
 
 func (sd *ServiceDiscovery) Deregister() error {
-	sd.registrar.Deregister()
-	return nil
+	return sd.client.Deregister(sd.registration)
 }
