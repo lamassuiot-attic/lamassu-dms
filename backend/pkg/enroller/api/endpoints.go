@@ -5,6 +5,8 @@ import (
 	"device-manufacturing-system/pkg/enroller/models/csr"
 
 	"github.com/go-kit/kit/endpoint"
+	"github.com/go-kit/kit/tracing/opentracing"
+	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -14,12 +16,32 @@ type Endpoints struct {
 	GetCRTEndpoint       endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s Service) Endpoints {
+func MakeServerEndpoints(s Service, otTracer stdopentracing.Tracer) Endpoints {
+	var healthEndpoint endpoint.Endpoint
+	{
+		healthEndpoint = MakeHealthEndpoint(s)
+		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
+	}
+	var getCSRsEndpoint endpoint.Endpoint
+	{
+		getCSRsEndpoint = MakeGetCSRsEndpoint(s)
+		getCSRsEndpoint = opentracing.TraceServer(otTracer, "GetPendingCSRs")(getCSRsEndpoint)
+	}
+	var getCSRStatusEndpoint endpoint.Endpoint
+	{
+		getCSRStatusEndpoint = MakeGetCSRStatusEndpoint(s)
+		getCSRStatusEndpoint = opentracing.TraceServer(otTracer, "GetPendingCSRDB")(getCSRStatusEndpoint)
+	}
+	var getCRTEndpoint endpoint.Endpoint
+	{
+		getCRTEndpoint = MakeGetCRTEndpoint(s)
+		getCRTEndpoint = opentracing.TraceServer(otTracer, "GetCRT")(getCRTEndpoint)
+	}
 	return Endpoints{
-		HealthEndpoint:       MakeHealthEndpoint(s),
-		GetCSRsEndpoint:      MakeGetCSRsEndpoint(s),
-		GetCSRStatusEndpoint: MakeGetCSRStatusEndpoint(s),
-		GetCRTEndpoint:       MakeGetCRTEndpoint(s),
+		HealthEndpoint:       healthEndpoint,
+		GetCSRsEndpoint:      getCSRsEndpoint,
+		GetCSRStatusEndpoint: getCSRStatusEndpoint,
+		GetCRTEndpoint:       getCRTEndpoint,
 	}
 }
 

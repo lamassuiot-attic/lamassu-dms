@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/consul/api"
 	scepclient "github.com/micromdm/scep/client"
 	"github.com/micromdm/scep/scep"
+	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -32,10 +33,12 @@ type SCEP struct {
 	consulProtocol string
 	consulHost     string
 	consulPort     string
+	consulCA       string
 	SCEPMapping    map[string]string
 	proxyCA        string
 	remote         scepclient.Client
 	logger         log.Logger
+	otTracer       stdopentracing.Tracer
 }
 
 type CSROptions struct {
@@ -54,7 +57,7 @@ var (
 	ErrConsulConnection  = errors.New("error connecting to Service Discovery server")
 )
 
-func NewClient(certFile string, keyFile string, proxyAddress string, consulProtocol string, consulHost string, consulPort string, SCEPMapping map[string]string, proxyCA string, logger log.Logger) client.Client {
+func NewClient(certFile string, keyFile string, proxyAddress string, consulProtocol string, consulHost string, consulPort string, consulCA string, SCEPMapping map[string]string, proxyCA string, logger log.Logger, otTracer stdopentracing.Tracer) client.Client {
 	return &SCEP{
 		certFile:       certFile,
 		keyFile:        keyFile,
@@ -62,9 +65,11 @@ func NewClient(certFile string, keyFile string, proxyAddress string, consulProto
 		consulProtocol: consulProtocol,
 		consulHost:     consulHost,
 		consulPort:     consulPort,
+		consulCA:       consulCA,
 		SCEPMapping:    SCEPMapping,
 		proxyCA:        proxyCA,
 		logger:         logger,
+		otTracer:       otTracer,
 	}
 }
 
@@ -88,6 +93,8 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 
 	consulConfig := api.DefaultConfig()
 	consulConfig.Address = s.consulProtocol + "://" + s.consulHost + ":" + s.consulPort
+	tlsConf := &api.TLSConfig{CAFile: s.consulCA}
+	consulConfig.TLSConfig = *tlsConf
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "Could not start Consul API Client")
@@ -99,7 +106,7 @@ func (s *SCEP) StartRemoteClient(CA string, authCRT []tls.Certificate) error {
 	duration := 500 * time.Millisecond
 	instancer := consulsd.NewInstancer(clientConsul, s.logger, s.SCEPMapping[CA], tags, passingOnly)
 
-	scepClient, err := scepclient.NewSD(serverURL, duration, instancer, s.logger, httpc)
+	scepClient, err := scepclient.NewSD(serverURL, duration, instancer, s.logger, httpc, s.otTracer)
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "Could not start SCEP Server Client")
 		return err
