@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	csrmodel "device-manufacturing-system/pkg/enroller/models/csr"
+	"fmt"
 	"time"
 
 	"github.com/go-kit/kit/metrics"
@@ -26,8 +27,9 @@ func NewInstrumentingMiddleware(counter metrics.Counter, latency metrics.Histogr
 
 func (mw *instrumentingMiddleware) Health(ctx context.Context) bool {
 	defer func(begin time.Time) {
-		mw.requestCount.With("method", "Health").Add(1)
-		mw.requestLatency.With("method", "Health").Observe(time.Since(begin).Seconds())
+		lvs := []string{"method", "Health", "error", "false"}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
 	return mw.next.Health(ctx)
@@ -35,8 +37,9 @@ func (mw *instrumentingMiddleware) Health(ctx context.Context) bool {
 
 func (mw *instrumentingMiddleware) GetCSRs(ctx context.Context) (csrs csrmodel.CSRs) {
 	defer func(begin time.Time) {
-		mw.requestCount.With("method", "GetCSRs").Add(1)
-		mw.requestLatency.With("method", "GetCSRs").Observe(time.Since(begin).Seconds())
+		lvs := []string{"method", "GetCSRs", "error", "false"}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
 	return mw.next.GetCSRs(ctx)
@@ -44,8 +47,9 @@ func (mw *instrumentingMiddleware) GetCSRs(ctx context.Context) (csrs csrmodel.C
 
 func (mw *instrumentingMiddleware) GetCSRStatus(ctx context.Context, id int) (csr csrmodel.CSR, err error) {
 	defer func(begin time.Time) {
-		mw.requestCount.With("method", "GetCSRStatus").Add(1)
-		mw.requestLatency.With("method", "GetCSRStatus").Observe(time.Since(begin).Seconds())
+		lvs := []string{"method", "GetCSRStatus", "error", fmt.Sprint(err != nil)}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
 	return mw.next.GetCSRStatus(ctx, id)
@@ -53,8 +57,9 @@ func (mw *instrumentingMiddleware) GetCSRStatus(ctx context.Context, id int) (cs
 
 func (mw *instrumentingMiddleware) GetCRT(ctx context.Context, id int) (data []byte, err error) {
 	defer func(begin time.Time) {
-		mw.requestCount.With("method", "GetCRT").Add(1)
-		mw.requestLatency.With("method", "GetCRT").Observe(time.Since(begin).Seconds())
+		lvs := []string{"method", "GetCRT", "error", fmt.Sprint(err != nil)}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
 	return mw.next.GetCRT(ctx, id)

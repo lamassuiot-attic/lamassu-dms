@@ -57,7 +57,7 @@ func main() {
 	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.ProxyAddress, cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, cfg.ConsulCA, cfg.SCEPMapping, cfg.ProxyCA, logger, tracer)
 	level.Info(logger).Log("msg", "Remote SCEP Client started")
 
-	fieldKeys := []string{"method"}
+	fieldKeys := []string{"method", "error"}
 	var s api.Service
 	{
 		s = api.NewDeviceService(cfg.AuthKeyFile, client)

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-kit/kit/metrics"
@@ -25,8 +26,9 @@ func NewInstumentingMiddleware(counter metrics.Counter, latency metrics.Histogra
 
 func (mw *instrumentingMiddleware) Health(ctx context.Context) bool {
 	defer func(begin time.Time) {
-		mw.requestCount.With("method", "Health").Add(1)
-		mw.requestLatency.With("method", "Health").Observe(time.Since(begin).Seconds())
+		lvs := []string{"method", "Health", "error", "false"}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
 	return mw.next.Health(ctx)
@@ -34,8 +36,9 @@ func (mw *instrumentingMiddleware) Health(ctx context.Context) bool {
 
 func (mw *instrumentingMiddleware) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error) {
 	defer func(begin time.Time) {
-		mw.requestCount.With("method", "PostGetCRT").Add(1)
-		mw.requestLatency.With("method", "PostGetCRT").Observe(time.Since(begin).Seconds())
+		lvs := []string{"method", "PostGetCRT", "error", fmt.Sprint(err != nil)}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
 	return mw.next.PostGetCRT(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email)
@@ -43,8 +46,9 @@ func (mw *instrumentingMiddleware) PostGetCRT(ctx context.Context, keyAlg string
 
 func (mw *instrumentingMiddleware) PostSetConfig(ctx context.Context, authCRT string, CA string) (err error) {
 	defer func(begin time.Time) {
-		mw.requestCount.With("method", "PostSetConfig").Add(1)
-		mw.requestLatency.With("method", "PostSetConfig").Observe(time.Since(begin).Seconds())
+		lvs := []string{"method", "PostSetConfig", "error", fmt.Sprint(err != nil)}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
 	return mw.next.PostSetConfig(ctx, authCRT, CA)
