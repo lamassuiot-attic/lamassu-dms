@@ -32,7 +32,7 @@ func TestPostSetConfig(t *testing.T) {
 	srv := NewDeviceService(stu.authKeyFile, stu.client)
 	ctx := context.Background()
 
-	stu.client.(*mocks.MockClient).StartRemoteClientFn = func(CA string, authCRT []tls.Certificate) error {
+	stu.client.(*mocks.MockClient).StartClientFn = func(ctx context.Context, CA string, authCRT []tls.Certificate) error {
 		return nil
 	}
 
@@ -60,7 +60,7 @@ func TestPostGetCRT(t *testing.T) {
 	srv := NewDeviceService(stu.authKeyFile, stu.client)
 	ctx := context.Background()
 
-	stu.client.(*mocks.MockClient).GetCertificateFn = func(keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (*x509.Certificate, crypto.PrivateKey, error) {
+	stu.client.(*mocks.MockClient).GetCertificateFn = func(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (*x509.Certificate, crypto.PrivateKey, error) {
 		key, err := testSCEPKey(keyAlg, keySize)
 		if err != nil {
 			return nil, nil, err

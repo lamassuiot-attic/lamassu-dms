@@ -3,7 +3,7 @@ package main
 import (
 	"device-manufacturing-system/pkg/enroller/auth"
 	"device-manufacturing-system/pkg/manufacturing/api"
-	"device-manufacturing-system/pkg/manufacturing/client/scep"
+	"device-manufacturing-system/pkg/manufacturing/client/extension"
 	"device-manufacturing-system/pkg/manufacturing/configs"
 	"device-manufacturing-system/pkg/manufacturing/discovery/consul"
 	"fmt"
@@ -54,7 +54,7 @@ func main() {
 	defer closer.Close()
 	level.Info(logger).Log("msg", "Jaeger tracer started")
 
-	client := scep.NewClient(cfg.CertFile, cfg.KeyFile, cfg.ProxyAddress, cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, cfg.ConsulCA, cfg.SCEPMapping, cfg.ProxyCA, logger, tracer)
+	client := extension.NewClient(cfg.ProxyAddress, cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, cfg.ConsulCA, cfg.ProxyCA, logger, tracer)
 	level.Info(logger).Log("msg", "Remote SCEP Client started")
 
 	fieldKeys := []string{"method", "error"}

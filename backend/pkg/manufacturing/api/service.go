@@ -28,7 +28,6 @@ type Service interface {
 
 type deviceService struct {
 	mtx         sync.RWMutex
-	serverURL   string
 	authKeyFile string
 	client      client.Client
 }
@@ -69,7 +68,7 @@ func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA st
 	if err != nil {
 		return errKeyMatching
 	}
-	err = s.client.StartRemoteClient(CA, []tls.Certificate{cert})
+	err = s.client.StartClient(ctx, CA, []tls.Certificate{cert})
 	if err != nil {
 		return errRemoteConnection
 	}
@@ -91,7 +90,7 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 		return nil, errCNEmpty
 	}
 
-	cert, key, err := s.client.GetCertificate(keyAlg, keySize, c, st, l, o, ou, cn, email)
+	cert, key, err := s.client.GetCertificate(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email)
 	if err != nil {
 		return nil, err
 	}

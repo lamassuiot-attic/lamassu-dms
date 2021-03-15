@@ -11,9 +11,20 @@ import (
 const (
 	CertPEMBlockType = "CERTIFICATE"
 	KeyPEMBlockType  = "RSA PRIVATE KEY"
+	CSRPEMBlockType  = "CERTIFICATE REQUEST"
 	PublicKeyHeader  = "-----BEGIN PUBLIC KEY-----"
 	PublicKeyFooter  = "-----END PUBLIC KEY-----"
 )
+
+func PEMCSR(derBytes []byte) []byte {
+	pemBlock := &pem.Block{
+		Type:    CSRPEMBlockType,
+		Headers: nil,
+		Bytes:   derBytes,
+	}
+	out := pem.EncodeToMemory(pemBlock)
+	return out
+}
 
 func PEMKey(derBytes []byte) []byte {
 	pemBlock := &pem.Block{
@@ -63,4 +74,17 @@ func ParsePublicKey(data []byte) (*rsa.PublicKey, error) {
 	}
 	pubKey := parsedKey.(*rsa.PublicKey)
 	return pubKey, nil
+}
+
+func ParseCertificate(data []byte) (*x509.Certificate, error) {
+	pemBlock, _ := pem.Decode(data)
+	err := CheckPEMBlock(pemBlock, CertPEMBlockType)
+	if err != nil {
+		return nil, err
+	}
+	crt, err := x509.ParseCertificate(pemBlock.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return crt, nil
 }

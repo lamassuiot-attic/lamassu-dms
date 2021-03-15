@@ -45,8 +45,6 @@ spec:
               value: "/certs/manufacturing.crt"
             - name: MANUFACTURING_KEYFILE
               value: "/certs/manufacturing.key"
-            - name: MANUFACTURING_SCEPMAPPING
-              value: "Lamassu-Root-CA1-RSA4096:scepca1,Lamassu-Root-CA2-RSA2048:scepca2,Lamassu-Root-CA3-ECC384:scepca3,Lamassu-Root-CA4-ECC256:scepca4"
             - name: MANUFACTURING_AUTHKEYFILE
               value: "/certs/operator.key"
             - name: MANUFACTURING_PROXYADDRESS

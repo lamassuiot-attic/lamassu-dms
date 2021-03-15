@@ -25,7 +25,6 @@ type Config struct {
 	AuthKeyFile  string
 	ProxyAddress string
 	ProxyCA      string
-	SCEPMapping  map[string]string
 }
 
 func NewConfig(prefix string) (Config, error) {
