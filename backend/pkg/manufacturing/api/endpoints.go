@@ -72,6 +72,10 @@ type postSetConfigRequest struct {
 	CA      string `json:"ca"`
 }
 
+type postSetConfigExtRequest struct {
+	CA string `json:"ca"`
+}
+
 type postSetConfigResponse struct {
 	Err error `json:"error,omitempty"`
 }
