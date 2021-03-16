@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manufacturingenroll
+  labels:
+    app: manufacturingenroll
+  annotations:
+    "sidecar.jaegertracing.io/inject": "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manufacturingenroll
+  template:
+    metadata:
+      labels:
+        app: manufacturingenroll
+    spec:
+      containers:
+        - name: manufacturingenroll
+          image: manufacturingenroll:latest
+          imagePullPolicy: Never
+          volumeMounts:
+            - name: certs
+              mountPath: "/certs"
+              readOnly: true
+          env:
+            - name: ENROLLER_PORT
+              value: "8889"
+            - name: ENROLLER_UIHOST
+              value: "manufacturingui"
+            - name: ENROLLER_UIPROTOCOL
+              value: "https"
+            - name: ENROLLER_KEYCLOAKHOSTNAME
+              value: "keycloak"
+            - name: ENROLLER_KEYCLOAKPORT
+              value: "8443"
+            - name: ENROLLER_KEYCLOAKPROTOCOL
+              value: "https"
+            - name: ENROLLER_KEYCLOAKREALM
+              value: "lamassu"
+            - name: ENROLLER_KEYCLOAKCA
+              value: "/certs/keycloak.crt"
+            - name: ENROLLER_CERTFILE
+              value: "/certs/manufacturing.crt"
+            - name: ENROLLER_KEYFILE
+              value: "/certs/manufacturing.key"
+            - name: ENROLLER_PROXYADDRESS
+              value: "https://enroller:8085"
+            - name: ENROLLER_PROXYCA
+              value: "/certs/enroller.crt"
+            - name: ENROLLER_CONSULPROTOCOL
+              value: "https"
+            - name: ENROLLER_CONSULHOST
+              value: "consul-server"
+            - name: ENROLLER_CONSULPORT
+              value: "8501"
+            - name: ENROLLER_CONSULCA
+              value: "/certs/consul.crt"
+            - name: JAEGER_SERVICE_NAME
+              value: "dms-enroller"
+            - name: JAEGER_AGENT_HOST
+              value: "localhost"
+            - name: JAEGER_AGENT_PORT
+              value: "6831"
+      volumes:
+        - name: certs
+          secret:
+            secretName: dms-enroller-certs

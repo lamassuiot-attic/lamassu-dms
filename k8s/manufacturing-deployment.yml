@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manufacturing
+  labels:
+    app: manufacturing
+  annotations:
+    "sidecar.jaegertracing.io/inject": "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: manufacturing
+  template:
+    metadata:
+      labels:
+        app: manufacturing
+    spec:
+      containers:
+        - name: manufacturing
+          image: manufacturing:latest
+          imagePullPolicy: Never
+          volumeMounts:
+            - name: certs
+              mountPath: "/certs"
+              readOnly: true
+          env:
+            - name: MANUFACTURING_PORT
+              value: "8888"
+            - name: MANUFACTURING_UIHOST
+              value: "manufacturingui"
+            - name: MANUFACTURING_UIPROTOCOL
+              value: "https"
+            - name: MANUFACTURING_KEYCLOAKHOSTNAME
+              value: "keycloak"
+            - name: MANUFACTURING_KEYCLOAKPORT
+              value: "8443"
+            - name: MANUFACTURING_KEYCLOAKPROTOCOL
+              value: "https"
+            - name: MANUFACTURING_KEYCLOAKREALM
+              value: "lamassu"
+            - name: MANUFACTURING_KEYCLOAKCA
+              value: "/certs/keycloak.crt"
+            - name: MANUFACTURING_CERTFILE
+              value: "/certs/manufacturing.crt"
+            - name: MANUFACTURING_KEYFILE
+              value: "/certs/manufacturing.key"
+            - name: MANUFACTURING_AUTHKEYFILE
+              value: "/certs/operator.key"
+            - name: MANUFACTURING_PROXYADDRESS
+              value: "https://scepproxy"
+            - name: MANUFACTURING_PROXYCA
+              value: "/certs/scepproxy.crt"
+            - name: MANUFACTURING_CONSULPROTOCOL
+              value: "https"
+            - name: MANUFACTURING_CONSULHOST
+              value: "consul-server"
+            - name: MANUFACTURING_CONSULPORT
+              value: "8501"
+            - name: MANUFACTURING_CONSULCA
+              value: "/certs/consul.crt"
+            - name: JAEGER_SERVICE_NAME
+              value: "dms-manufacturing"
+            - name: JAEGER_AGENT_HOST
+              value: "localhost"
+            - name: JAEGER_AGENT_PORT
+              value: "6831"
+      volumes:
+        - name: certs
+          secret:
+            secretName: dms-manufacturing-certs
