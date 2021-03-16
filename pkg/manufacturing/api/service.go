@@ -6,9 +6,9 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"device-manufacturing-system/pkg/manufacturing/client"
-	"device-manufacturing-system/pkg/manufacturing/utils"
 	"encoding/pem"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/utils"
 	"io/ioutil"
 	"sync"
 

@@ -3,9 +3,9 @@ package api
 import (
 	"bytes"
 	"context"
-	"device-manufacturing-system/pkg/enroller/auth"
-	"device-manufacturing-system/pkg/enroller/models/csr"
 	"encoding/json"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/auth"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/models/csr"
 	"io/ioutil"
 	"net/http"
 	"net/url"

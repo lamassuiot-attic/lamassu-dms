@@ -2,9 +2,9 @@ package auth
 
 import (
 	"crypto/tls"
-	"device-manufacturing-system/pkg/manufacturing/utils"
 	"encoding/json"
 	"errors"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/utils"
 	"net/http"
 
 	stdjwt "github.com/dgrijalva/jwt-go"

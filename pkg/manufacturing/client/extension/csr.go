@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"device-manufacturing-system/crypto/x509util"
+	"github.com/lamassuiot/device-manufacturing-system/crypto/x509util"
 )
 
 func makeCSR(opts *CSROptions) (*x509.CertificateRequest, error) {

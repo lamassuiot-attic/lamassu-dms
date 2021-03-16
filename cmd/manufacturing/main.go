@@ -1,12 +1,12 @@
 package main
 
 import (
-	"device-manufacturing-system/pkg/enroller/auth"
-	"device-manufacturing-system/pkg/manufacturing/api"
-	"device-manufacturing-system/pkg/manufacturing/client/extension"
-	"device-manufacturing-system/pkg/manufacturing/configs"
-	"device-manufacturing-system/pkg/manufacturing/discovery/consul"
 	"fmt"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/auth"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/api"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client/extension"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/configs"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/discovery/consul"
 	"net/http"
 	"os"
 	"os/signal"

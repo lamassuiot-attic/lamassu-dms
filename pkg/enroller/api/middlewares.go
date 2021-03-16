@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	csrmodel "device-manufacturing-system/pkg/enroller/models/csr"
+	csrmodel "github.com/lamassuiot/device-manufacturing-system/pkg/enroller/models/csr"
 	"time"
 
 	"github.com/go-kit/kit/log"

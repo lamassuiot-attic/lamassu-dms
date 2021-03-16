@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"device-manufacturing-system/pkg/enroller/models/csr"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/models/csr"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/tracing/opentracing"

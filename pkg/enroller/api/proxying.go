@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"crypto/tls"
-	"device-manufacturing-system/pkg/enroller/models/csr"
-	csrmodel "device-manufacturing-system/pkg/enroller/models/csr"
-	"device-manufacturing-system/pkg/enroller/utils"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/models/csr"
+	csrmodel "github.com/lamassuiot/device-manufacturing-system/pkg/enroller/models/csr"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/utils"
 	"io"
 	"net/http"
 	"net/url"

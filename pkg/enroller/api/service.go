@@ -2,8 +2,8 @@ package api
 
 import (
 	"context"
-	csrmodel "device-manufacturing-system/pkg/enroller/models/csr"
 	"errors"
+	csrmodel "github.com/lamassuiot/device-manufacturing-system/pkg/enroller/models/csr"
 	"sync"
 )
 

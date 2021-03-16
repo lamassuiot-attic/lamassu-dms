@@ -2,8 +2,8 @@ package api
 
 import (
 	"context"
-	"device-manufacturing-system/pkg/manufacturing/auth"
 	"encoding/json"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/auth"
 	"net/http"
 
 	"github.com/go-kit/kit/auth/jwt"

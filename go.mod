@@ -1,4 +1,4 @@
-module device-manufacturing-system
+module github.com/lamassuiot/device-manufacturing-system
 
 go 1.15
 
@@ -20,6 +20,6 @@ require (
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 )
 
-replace github.com/micromdm/scep => /home/mamuchastegui/go/src/github.com/micromdm/scep
+replace github.com/micromdm/scep => github.com/lamassuiot/scep v1.0.1-0.20210316084701-d4decbf7937e
 
 replace github.com/fullsailor/pkcs7 => github.com/groob/pkcs7 v0.0.0-20180824154052-36585635cb64
