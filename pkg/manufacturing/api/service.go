@@ -7,10 +7,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client"
-	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/utils"
+	"fmt"
 	"io/ioutil"
 	"sync"
+
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/utils"
 
 	"github.com/pkg/errors"
 )
@@ -56,6 +58,7 @@ func (s *deviceService) Health(ctx context.Context) bool {
 
 func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA string) error {
 	authKey, err := loadAuthKey(s.authKeyFile)
+	fmt.Println(s.authKeyFile)
 	if err != nil {
 		return errGetAuthKey
 	}
@@ -116,6 +119,7 @@ func checkKeyAlg(keyAlg string) error {
 	return nil
 }
 
+// TODO: mas variedad
 func checkKeySize(keyAlg string, keySize int) error {
 	if keyAlg == "EC" && keySize != 384 && keySize != 256 {
 		return errUnsupportedECSize

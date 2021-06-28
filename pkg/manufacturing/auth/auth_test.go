@@ -2,7 +2,7 @@ package auth
 
 import (
 	"crypto/rsa"
-	"dgithub.com/lamassuiot/device-manufacturing-system/pkg/enroller/configs"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/configs"
 	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/utils"
 	"io/ioutil"
 	"testing"
