@@ -34,7 +34,7 @@ func (mw loggingMidleware) Health(ctx context.Context) (healthy bool) {
 	return mw.next.Health(ctx)
 }
 
-func (mw loggingMidleware) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error) {
+func (mw loggingMidleware) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c, st, l, o, ou, cn, email, deviceId, caName string) (data []byte, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "PostGetCRT",
@@ -49,9 +49,10 @@ func (mw loggingMidleware) PostGetCRT(ctx context.Context, keyAlg string, keySiz
 			"email", email,
 			"took", time.Since(begin),
 			"err", err,
+			"deviceId", deviceId,
 		)
 	}(time.Now())
-	return mw.next.PostGetCRT(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email)
+	return mw.next.PostGetCRT(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email, deviceId, "")
 }
 
 func (mw loggingMidleware) PostSetConfig(ctx context.Context, authCRT string, CA string) (err error) {

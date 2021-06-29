@@ -20,7 +20,7 @@ func (mc *MockClient) StartClient(ctx context.Context, CA string, authCRT []tls.
 	return mc.StartClientFn(ctx, CA, authCRT)
 }
 
-func (mc *MockClient) GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (*x509.Certificate, crypto.PrivateKey, error) {
+func (mc *MockClient) GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string, caName string) (*x509.Certificate, crypto.PrivateKey, error) {
 	mc.GetCertificateInvoked = true
 	return mc.GetCertificateFn(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email)
 }

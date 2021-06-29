@@ -128,7 +128,7 @@ func (s *SCEPExt) StartClient(ctx context.Context, CA string, authCRT []tls.Cert
 	return nil
 }
 
-func (s *SCEPExt) GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (*x509.Certificate, crypto.PrivateKey, error) {
+func (s *SCEPExt) GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string, caName string) (*x509.Certificate, crypto.PrivateKey, error) {
 	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Second*10))
 	defer cancel()
 	sigAlgo := s.checkSignatureAlgorithm(keyAlg)
@@ -163,7 +163,7 @@ func (s *SCEPExt) GetCertificate(ctx context.Context, keyAlg string, keySize int
 
 	//pemcsr := utils.PEMCSR(csr.Raw)
 	//crtData, err := s.extClient.PostGetCRT(ctx, pemcsr)
-	crt, err := estclient.Enroll(csr)
+	crt, err := estclient.Enroll(csr, caName)
 
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "Could not obtain certificate from SCEP Server")
