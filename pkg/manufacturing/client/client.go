@@ -9,5 +9,5 @@ import (
 
 type Client interface {
 	StartClient(ctx context.Context, CA string, authCRT []tls.Certificate) error
-	GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (*x509.Certificate, crypto.PrivateKey, error)
+	GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string, caName string) (*x509.Certificate, crypto.PrivateKey, error)
 }

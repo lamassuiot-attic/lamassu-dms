@@ -90,7 +90,7 @@ func TestPostGetCRT(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
-			_, err := srv.PostGetCRT(ctx, tc.keyAlg, tc.keySize, "", "", "", "", "", tc.cn, "")
+			_, err := srv.PostGetCRT(ctx, tc.keyAlg, tc.keySize, "", "", "", "", "", tc.cn, "", "")
 			if tc.ret != err {
 				t.Errorf("Got result is %s; want %s", err, tc.ret)
 			}

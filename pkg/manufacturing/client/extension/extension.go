@@ -6,11 +6,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client"
-	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/utils"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client"
+	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/utils"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -18,6 +19,8 @@ import (
 	"github.com/hashicorp/consul/api"
 	extensionclient "github.com/micromdm/scep/client/extension"
 	stdopentracing "github.com/opentracing/opentracing-go"
+
+	"github.com/lamassuiot/lamassu-est/client/estclient"
 )
 
 const (
@@ -125,7 +128,7 @@ func (s *SCEPExt) StartClient(ctx context.Context, CA string, authCRT []tls.Cert
 	return nil
 }
 
-func (s *SCEPExt) GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (*x509.Certificate, crypto.PrivateKey, error) {
+func (s *SCEPExt) GetCertificate(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string, caName string) (*x509.Certificate, crypto.PrivateKey, error) {
 	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Second*10))
 	defer cancel()
 	sigAlgo := s.checkSignatureAlgorithm(keyAlg)
@@ -155,17 +158,23 @@ func (s *SCEPExt) GetCertificate(ctx context.Context, keyAlg string, keySize int
 		return nil, nil, err
 	}
 	level.Info(s.logger).Log("msg", "CSR for SCEP request created")
-	crtData, err := s.extClient.PostGetCRT(ctx, utils.PEMCSR(csr.Raw))
+
+	/* SWITCH FROM SCEP TO EST HERE */
+
+	//pemcsr := utils.PEMCSR(csr.Raw)
+	//crtData, err := s.extClient.PostGetCRT(ctx, pemcsr)
+	crt, err := estclient.Enroll(csr, caName)
+
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "Could not obtain certificate from SCEP Server")
 		return nil, nil, err
 	}
 	level.Info(s.logger).Log("msg", "SCEP Server returned certificate")
-	crt, err := utils.ParseCertificate(crtData)
+	/*crt, err := utils.ParseCertificate(crtData)
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "Could not parse certificate obtained from SCEP Server")
 		return nil, nil, err
-	}
+	}*/
 	level.Info(s.logger).Log("msg", "Certificate obtained from SCEP Server parsed")
 	return crt, key, nil
 

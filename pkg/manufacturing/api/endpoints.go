@@ -55,7 +55,7 @@ func MakePostSetConfigEndpoint(s Service) endpoint.Endpoint {
 func MakePostGetCRTEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(postGetCRTRequest)
-		data, err := s.PostGetCRT(ctx, req.KeyAlg, req.KeySize, req.C, req.ST, req.L, req.O, req.OU, req.CN, req.EMAIL)
+		data, err := s.PostGetCRT(ctx, req.KeyAlg, req.KeySize, req.C, req.ST, req.L, req.O, req.OU, req.CN, req.EMAIL, req.DeviceID, "")
 		return postGetCRTResponse{Data: data, Err: err}, nil
 	}
 }
@@ -83,15 +83,17 @@ type postSetConfigResponse struct {
 func (r postSetConfigResponse) error() error { return r.Err }
 
 type postGetCRTRequest struct {
-	KeyAlg  string `json:"keyAlg"`
-	KeySize int    `json:"keySize"`
-	C       string `json:"c"`
-	ST      string `json:"string"`
-	L       string `json:"l"`
-	O       string `json:"o"`
-	OU      string `json:"ou"`
-	CN      string `json:"cn"`
-	EMAIL   string `json:"email"`
+	KeyAlg   string `json:"keyAlg"`
+	KeySize  int    `json:"keySize"`
+	C        string `json:"c"`
+	ST       string `json:"string"`
+	L        string `json:"l"`
+	O        string `json:"o"`
+	OU       string `json:"ou"`
+	CN       string `json:"cn"`
+	EMAIL    string `json:"email"`
+	DeviceID string `json:"device_id"`
+	CaName   string `json:"ca_name"`
 }
 
 type postGetCRTResponse struct {

@@ -1,16 +1,21 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"sync"
+
 	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client"
 	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/utils"
-	"io/ioutil"
-	"sync"
 
 	"github.com/pkg/errors"
 )
@@ -23,7 +28,7 @@ const (
 type Service interface {
 	Health(ctx context.Context) bool
 	PostSetConfig(ctx context.Context, authCRT string, CA string) error
-	PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error)
+	PostGetCRT(ctx context.Context, keyAlg string, keySize int, c, st, l, o, ou, cn, email, deviceId, caName string) (data []byte, err error)
 }
 
 type deviceService struct {
@@ -56,6 +61,7 @@ func (s *deviceService) Health(ctx context.Context) bool {
 
 func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA string) error {
 	authKey, err := loadAuthKey(s.authKeyFile)
+	fmt.Println(s.authKeyFile)
 	if err != nil {
 		return errGetAuthKey
 	}
@@ -75,7 +81,7 @@ func (s *deviceService) PostSetConfig(ctx context.Context, authCRT string, CA st
 	return nil
 }
 
-func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c string, st string, l string, o string, ou string, cn string, email string) (data []byte, err error) {
+func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize int, c, st, l, o, ou, cn, email, deviceId, caName string) (data []byte, err error) {
 	err = checkKeyAlg(keyAlg)
 	if err != nil {
 		return nil, err
@@ -90,7 +96,7 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 		return nil, errCNEmpty
 	}
 
-	cert, key, err := s.client.GetCertificate(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email)
+	cert, key, err := s.client.GetCertificate(ctx, keyAlg, keySize, c, st, l, o, ou, cn, email, caName)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +112,19 @@ func (s *deviceService) PostGetCRT(ctx context.Context, keyAlg string, keySize i
 		return nil, err
 	}
 
+	postBody, _ := json.Marshal(map[string]string{
+		"ca_name":  caName,
+		"serial_number": "lalalalalallal", //TODO: serial number comes decoding the cert
+	})
+
+	//TODO: finish this
+	responseBody := bytes.NewBuffer(postBody)
+	resp, err := http.Post("https://devices/v1/devices/" + deviceId + "/issue/dms/", "application/json", responseBody)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(deviceId, resp)
+
 	return append(utils.PEMCert(cert.Raw), utils.PEMKey(repKey)...), nil
 }
 
@@ -116,6 +135,7 @@ func checkKeyAlg(keyAlg string) error {
 	return nil
 }
 
+// TODO: mas variedad
 func checkKeySize(keyAlg string, keySize int) error {
 	if keyAlg == "EC" && keySize != 384 && keySize != 256 {
 		return errUnsupportedECSize

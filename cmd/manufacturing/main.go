@@ -2,15 +2,16 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/lamassuiot/device-manufacturing-system/pkg/enroller/auth"
 	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/api"
 	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/client/extension"
 	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/configs"
 	"github.com/lamassuiot/device-manufacturing-system/pkg/manufacturing/discovery/consul"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -83,6 +84,7 @@ func main() {
 		level.Error(logger).Log("err", err, "msg", "Could not start connection with Consul Service Discovery")
 		os.Exit(1)
 	}
+
 	err = consulsd.Register("https", "manufacturing", cfg.Port)
 	if err != nil {
 		level.Error(logger).Log("err", err, "msg", "Could not register service liveness information to Consul")
